@@ -1,0 +1,28 @@
+appId: com.opqnext.moji-docs
+productName: Moji文档
+directories:
+  buildResources: assets
+  output: release
+files:
+  - out/**/*
+  - package.json
+mac:
+  target:
+    - dmg
+  icon: assets/icon.icns
+  category: public.app-category.productivity
+win:
+  target:
+    - nsis
+  icon: assets/icon.png
+linux:
+  target:
+    - AppImage
+    - deb
+  icon: assets/icon.png
+  category: Office
+extraMetadata:
+  main: out/main/index.js
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true

@@ -1,0 +1,33 @@
+{
+  "name": "moji-docs",
+  "version": "1.0.0",
+  "description": "Moji文档 - Markdown Wiki 桌面应用",
+  "main": "out/main/index.js",
+  "scripts": {
+    "dev": "unset ELECTRON_RUN_AS_NODE && electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "unset ELECTRON_RUN_AS_NODE && electron-vite preview",
+    "package": "electron-builder",
+    "postinstall": "electron-builder install-app-deps"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.0.0",
+    "chokidar": "^3.6.0",
+    "gray-matter": "^4.0.3",
+    "highlight.js": "^11.11.1",
+    "marked": "^17.0.5",
+    "marked-highlight": "^2.2.4",
+    "simple-git": "^3.27.0"
+  },
+  "devDependencies": {
+    "@electron-toolkit/preload": "^3.0.0",
+    "@types/better-sqlite3": "^7.6.13",
+    "@vitejs/plugin-vue": "^5.0.0",
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0",
+    "electron-vite": "^2.3.0",
+    "vite": "^5.4.0",
+    "vue": "^3.5.0",
+    "vue-router": "^4.4.0"
+  }
+}
