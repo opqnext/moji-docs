@@ -10,7 +10,8 @@ import * as syncQueue from '../sync-queue'
 const DEFAULTS: Record<string, string> = {
   site_name: 'MojiDocs',
   footer_text: 'Copyright © 2018~2025. opqnext All rights reserved.',
-  theme_color: '#6c5ce7',
+  theme_color: '#02af6a',
+  font_size: '14',
   markdown_theme: 'default',
   git_url: '',
   git_branch: 'main',

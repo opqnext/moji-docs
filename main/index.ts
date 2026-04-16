@@ -165,6 +165,8 @@ app.whenReady().then(() => {
       if (!existsSync(join(docsRoot, '.git'))) {
         const git = simpleGit(docsRoot)
         await git.init()
+        const configuredBranch = gitBranch || 'main'
+        try { await git.raw(['branch', '-M', configuredBranch]) } catch {}
         try { await git.addRemote('origin', gitUrl) } catch {}
       }
 

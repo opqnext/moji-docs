@@ -461,7 +461,7 @@ onBeforeUnmount(() => {
   outline: none;
   resize: none;
   padding: 20px 24px;
-  font-size: 14px;
+  font-size: var(--fs, 14px);
   font-family: "SF Mono", "Monaco", "Menlo", monospace;
   line-height: 1.7;
 }

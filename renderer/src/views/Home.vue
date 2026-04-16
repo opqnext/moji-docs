@@ -17,7 +17,7 @@
       <h4 style="margin-bottom: 12px; color: #666;">搜索结果 ({{ searchResults.length }})</h4>
       <div v-for="item in searchResults" :key="item.file_path" class="search-result-item" @click="goDoc(item)">
         <div class="search-result-header">
-          <svg class="search-doc-icon" v-if="item.is_directory" viewBox="0 0 24 24" fill="none" stroke="#6c5ce7" stroke-width="1.5"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
+          <svg class="search-doc-icon" v-if="item.is_directory" viewBox="0 0 24 24" fill="none" stroke="var(--tc)" stroke-width="1.5"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
           <svg class="search-doc-icon" v-else viewBox="0 0 24 24" fill="none" stroke="#999" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/></svg>
           <span class="search-title" v-html="highlightResult(item.title_hl || item.title)"></span>
           <span class="doc-time">{{ formatTime(item.updated_at) }}</span>
@@ -41,7 +41,7 @@
             <div v-if="recent.today.length" class="section-group">
               <h4>今天</h4>
               <div v-for="item in recent.today" :key="item.file_path" class="doc-item" @click="goDoc(item)">
-                <svg class="doc-icon" v-if="item.is_directory" viewBox="0 0 24 24" fill="none" stroke="#6c5ce7" stroke-width="1.5"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
+                <svg class="doc-icon" v-if="item.is_directory" viewBox="0 0 24 24" fill="none" stroke="var(--tc)" stroke-width="1.5"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
                 <svg class="doc-icon" v-else viewBox="0 0 24 24" fill="none" stroke="#999" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/></svg>
                 <span class="doc-title">{{ item.title }}</span>
                 <span class="doc-time">{{ formatTime(item.updated_at) }}</span>
@@ -50,7 +50,7 @@
             <div v-if="recent.week.length" class="section-group">
               <h4>7天内</h4>
               <div v-for="item in recent.week" :key="item.file_path" class="doc-item" @click="goDoc(item)">
-                <svg class="doc-icon" v-if="item.is_directory" viewBox="0 0 24 24" fill="none" stroke="#6c5ce7" stroke-width="1.5"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
+                <svg class="doc-icon" v-if="item.is_directory" viewBox="0 0 24 24" fill="none" stroke="var(--tc)" stroke-width="1.5"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
                 <svg class="doc-icon" v-else viewBox="0 0 24 24" fill="none" stroke="#999" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/></svg>
                 <span class="doc-title">{{ item.title }}</span>
                 <span class="doc-time">{{ formatTime(item.updated_at) }}</span>
@@ -59,7 +59,7 @@
             <div v-if="recent.earlier.length" class="section-group">
               <h4>更早</h4>
               <div v-for="item in recent.earlier" :key="item.file_path" class="doc-item" @click="goDoc(item)">
-                <svg class="doc-icon" v-if="item.is_directory" viewBox="0 0 24 24" fill="none" stroke="#6c5ce7" stroke-width="1.5"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
+                <svg class="doc-icon" v-if="item.is_directory" viewBox="0 0 24 24" fill="none" stroke="var(--tc)" stroke-width="1.5"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
                 <svg class="doc-icon" v-else viewBox="0 0 24 24" fill="none" stroke="#999" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/></svg>
                 <span class="doc-title">{{ item.title }}</span>
                 <span class="doc-time">{{ formatTime(item.updated_at) }}</span>
@@ -81,7 +81,7 @@
               </template>
             </div>
             <div v-for="item in allChildren" :key="item.file_path" class="doc-item" @click="item.is_directory ? browseDir(item.file_path) : goDoc(item)">
-              <svg class="doc-icon" v-if="item.is_directory" viewBox="0 0 24 24" fill="none" stroke="#6c5ce7" stroke-width="1.5"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
+              <svg class="doc-icon" v-if="item.is_directory" viewBox="0 0 24 24" fill="none" stroke="var(--tc)" stroke-width="1.5"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
               <svg class="doc-icon" v-else viewBox="0 0 24 24" fill="none" stroke="#999" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/></svg>
               <span class="doc-title">{{ item.title }}</span>
               <span class="doc-time">{{ formatTime(item.updated_at) }}</span>
@@ -236,7 +236,7 @@ onMounted(async () => {
 .home-left { flex: 1; min-width: 0; }
 .home-right { width: 240px; flex-shrink: 0; }
 
-.empty-tip { color: #999; font-size: 13px; padding: 8px 0; }
+.empty-tip { color: #999; font-size: calc(var(--fs, 14px) - 1px); padding: 8px 0; }
 
 .new-actions { margin-top: 16px; }
 .new-action-item {
@@ -244,14 +244,14 @@ onMounted(async () => {
   align-items: center;
   gap: 6px;
   padding: 6px 8px;
-  font-size: 13px;
+  font-size: calc(var(--fs, 14px) - 1px);
   color: var(--tc);
   cursor: pointer;
   border-radius: 4px;
   transition: all 0.15s;
   font-weight: 500;
 }
-.new-action-item:hover { background: #f0eeff; }
+.new-action-item:hover { background: color-mix(in srgb, var(--tc) 10%, transparent); }
 
 .search-result-item {
   padding: 10px 12px;
@@ -273,7 +273,7 @@ onMounted(async () => {
 }
 .search-title {
   flex: 1;
-  font-size: 14px;
+  font-size: var(--fs, 14px);
   font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -282,7 +282,7 @@ onMounted(async () => {
 .search-snippet {
   margin-top: 4px;
   margin-left: 26px;
-  font-size: 13px;
+  font-size: calc(var(--fs, 14px) - 1px);
   color: #777;
   line-height: 1.6;
   display: -webkit-box;

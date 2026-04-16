@@ -27,6 +27,13 @@ async function ensureGitRepo(docsRoot: string, gitUrl: string, branch: string): 
     await git.init()
   }
 
+  const branchInfo = await git.branchLocal()
+  if (branchInfo.current && branchInfo.current !== branch) {
+    try {
+      await git.raw(['branch', '-M', branch])
+    } catch {}
+  }
+
   if (gitUrl) {
     try {
       await git.remote(['set-url', 'origin', gitUrl])
@@ -85,15 +92,25 @@ export async function syncGit(db: Database.Database, docsRoot: string): Promise<
       await git.commit(`sync: ${now}`)
     }
 
-    let conflicts: string[] = []
+    let remoteHasBranch = false
     try {
-      await git.pull('origin', config.branch, ['--no-rebase'])
-    } catch (pullErr: any) {
-      const pullStatus = await git.status()
-      if (pullStatus.conflicted.length > 0) {
-        conflicts = await resolveConflicts(git, docsRoot, pullStatus.conflicted)
-      } else {
-        throw pullErr
+      const refs = await git.listRemote(['--heads', 'origin', config.branch])
+      remoteHasBranch = refs.trim().length > 0
+    } catch {
+      remoteHasBranch = false
+    }
+
+    let conflicts: string[] = []
+    if (remoteHasBranch) {
+      try {
+        await git.pull('origin', config.branch, ['--no-rebase'])
+      } catch (pullErr: any) {
+        const pullStatus = await git.status()
+        if (pullStatus.conflicted.length > 0) {
+          conflicts = await resolveConflicts(git, docsRoot, pullStatus.conflicted)
+        } else {
+          throw pullErr
+        }
       }
     }
 

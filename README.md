@@ -71,7 +71,19 @@ MojiDocs 是一款跨平台的 Markdown Wiki 桌面应用，基于 **Electron + 
 | Windows | `.exe` |
 | Linux | `.AppImage` / `.deb` |
 
-> macOS 用户首次打开可能需要在「系统设置 → 隐私与安全性」中允许运行。
+### macOS 安装说明
+
+由于应用未使用 Apple 开发者证书签名，从 GitHub 下载安装后 macOS 可能提示「文件已损坏」或「无法验证开发者」。请使用以下任一方法解决：
+
+**方法一**：终端执行（推荐）
+
+```bash
+xattr -cr /Applications/MojiDocs.app
+```
+
+**方法二**：右键点击应用图标 → 选择「打开」→ 在弹窗中点击「打开」
+
+> 这是 macOS Gatekeeper 安全机制的限制，与应用本身无关。每次安装或更新新版本后需重新执行一次。
 
 ## 快速开始
 

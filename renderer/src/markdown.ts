@@ -52,9 +52,31 @@ function preprocessImageSize(md: string): string {
   )
 }
 
+const CUSTOM_ALERTS = [
+  { prefix: '!>', bg: '#fffbeb', border: '#f59e0b', color: '#92400e' },
+  { prefix: '?>', bg: '#eff6ff', border: '#3b82f6', color: '#1e40af' },
+  { prefix: 'x>', bg: '#fef2f2', border: '#ef4444', color: '#991b1b' },
+  { prefix: '√>', bg: '#f0fdf4', border: '#22c55e', color: '#166534' },
+]
+
+function postprocessCustomAlerts(html: string): string {
+  for (const a of CUSTOM_ALERTS) {
+    const escaped = a.prefix.replace(/[?]/g, '\\$&')
+    const re = new RegExp(
+      `<p>(?:${escaped}|${escaped.replace('>', '&gt;')})\\s+(.+?)</p>`,
+      'gs'
+    )
+    html = html.replace(re, (_, text) =>
+      `<div style="background:${a.bg};border-left:4px solid ${a.border};padding:12px 16px;margin:16px 0;border-radius:4px;color:${a.color};font-size:inherit;line-height:1.6;">${text}</div>`
+    )
+  }
+  return html
+}
+
 export function renderMarkdown(md: string): string {
   try {
-    return marked.parse(preprocessImageSize(md)) as string
+    const html = marked.parse(preprocessImageSize(md)) as string
+    return postprocessCustomAlerts(html)
   } catch {
     return md
   }

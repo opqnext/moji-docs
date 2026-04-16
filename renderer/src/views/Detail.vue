@@ -15,7 +15,7 @@
     <!-- Search overlay -->
     <div v-if="searchKey && searchResults.length > 0" style="position:absolute;top:52px;left:0;right:0;background:#fff;z-index:100;padding:12px 24px;border-bottom:1px solid #e8e8e8;box-shadow:0 4px 12px rgba(0,0,0,0.08);">
       <div v-for="item in searchResults" :key="item.file_path" class="doc-item" @click="goDoc(item.file_path)">
-        <svg class="doc-icon" v-if="item.is_directory" viewBox="0 0 24 24" fill="none" stroke="#6c5ce7" stroke-width="1.5"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
+        <svg class="doc-icon" v-if="item.is_directory" viewBox="0 0 24 24" fill="none" stroke="var(--tc)" stroke-width="1.5"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
         <svg class="doc-icon" v-else viewBox="0 0 24 24" fill="none" stroke="#999" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/></svg>
         <span class="doc-title">{{ item.title }}</span>
       </div>
@@ -62,7 +62,7 @@
             :class="{ active: item.file_path === detail.doc.file_path }"
             @click="goDoc(item.file_path)"
           >
-            <svg class="doc-icon" v-if="item.is_directory" viewBox="0 0 24 24" fill="none" stroke="#6c5ce7" stroke-width="1.5"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
+            <svg class="doc-icon" v-if="item.is_directory" viewBox="0 0 24 24" fill="none" stroke="var(--tc)" stroke-width="1.5"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
             <svg class="doc-icon" v-else viewBox="0 0 24 24" fill="none" stroke="#999" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/></svg>
             <span class="doc-title">{{ item.title }}</span>
           </div>
@@ -105,7 +105,7 @@
               </div>
             </div>
           </div>
-          <div class="content-body" v-html="detail.doc.content_html || renderedHtml"></div>
+          <div class="content-body" :class="{ 'markdown-body': markdownTheme && markdownTheme.value !== 'default' }" v-html="detail.doc.content_html || renderedHtml"></div>
           <div class="footer">{{ footerText }}</div>
         </div>
       </div>
@@ -168,6 +168,7 @@ const siteName = inject<any>('siteName')
 const footerText = inject<any>('footerText')
 const toast = inject<any>('toast')
 const confirm = inject<any>('confirm')
+const markdownTheme = inject<any>('markdownTheme')
 
 const detail = ref<any>(null)
 const renderedHtml = ref('')
@@ -288,7 +289,7 @@ async function doExportPdf() {
       body { font-family: sans-serif; padding: 40px; line-height: 1.8; }
       pre { background: #f6f8fa; padding: 12px; border-radius: 6px; overflow-x: auto; }
       code { font-size: 13px; }
-      blockquote { border-left: 4px solid #6c5ce7; padding: 8px 16px; color: #666; }
+      blockquote { border-left: 4px solid var(--tc); padding: 8px 16px; color: #666; }
       table { border-collapse: collapse; width: 100%; }
       th, td { border: 1px solid #ddd; padding: 8px; }
     </style></head><body>
@@ -360,16 +361,44 @@ function handleDocClick(e: MouseEvent) {
   }
 }
 
+let themeLink: HTMLLinkElement | null = null
+
+function loadThemeCss(theme: string) {
+  if (themeLink) {
+    themeLink.remove()
+    themeLink = null
+  }
+  if (theme && theme !== 'default') {
+    themeLink = document.createElement('link')
+    themeLink.rel = 'stylesheet'
+    themeLink.href = `css/markdown-themes/${theme}.css`
+    document.head.appendChild(themeLink)
+  }
+}
+
+watch(() => markdownTheme?.value, (val) => {
+  loadThemeCss(val || 'default')
+}, { immediate: true })
+
+watch(detail, (val) => {
+  if (val) {
+    nextTick(() => {
+      contentRef.value?.addEventListener('scroll', onContentScroll)
+    })
+  }
+})
+
 onMounted(() => {
   loadDetail()
-  nextTick(() => {
-    contentRef.value?.addEventListener('scroll', onContentScroll)
-  })
   document.addEventListener('click', handleDocClick)
 })
 
 onBeforeUnmount(() => {
   document.removeEventListener('click', handleDocClick)
+  if (themeLink) {
+    themeLink.remove()
+    themeLink = null
+  }
 })
 </script>
 
@@ -418,7 +447,7 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 3px;
 }
-.sidebar-new-btn:hover { background: #f0eeff; }
+.sidebar-new-btn:hover { background: color-mix(in srgb, var(--tc) 10%, transparent); }
 .sidebar-new-menu {
   position: absolute;
   top: 28px;
@@ -446,6 +475,7 @@ onBeforeUnmount(() => {
   flex: 1;
   overflow-y: auto;
   height: 100%;
+  background: #fff;
 }
 .content-inner {
   padding: 24px 32px;
@@ -466,7 +496,7 @@ onBeforeUnmount(() => {
 }
 .doc-tags { display: flex; gap: 6px; }
 .doc-tag {
-  background: #f0eeff;
+  background: color-mix(in srgb, var(--tc) 10%, transparent);
   color: var(--tc);
   padding: 2px 8px;
   border-radius: 3px;

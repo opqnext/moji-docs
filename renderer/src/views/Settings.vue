@@ -73,12 +73,12 @@
 
         <!-- 主题颜色 -->
         <div v-if="activeTab === 'theme'" class="settings-panel">
-          <h3>主题颜色</h3>
+          <h3>外观主题</h3>
           <div class="form-group">
             <label>选择主题色</label>
             <div class="color-picker-row">
               <input type="color" v-model="settings.theme_color" />
-              <input v-model="settings.theme_color" class="color-hex-input" placeholder="#6c5ce7" maxlength="7" />
+              <input v-model="settings.theme_color" class="color-hex-input" placeholder="#02af6a" maxlength="7" />
               <div class="color-preview-box" :style="{ background: settings.theme_color }"></div>
             </div>
             <div class="preset-colors">
@@ -93,10 +93,52 @@
               ></div>
             </div>
           </div>
+          <div class="form-group" style="margin-top: 20px;">
+            <label>界面字体大小</label>
+            <div class="font-size-row">
+              <div class="font-size-track">
+                <input
+                  type="range"
+                  min="12"
+                  max="16"
+                  step="1"
+                  v-model.number="settings.font_size"
+                  class="font-size-slider"
+                />
+                <div class="font-size-labels">
+                  <span>12</span><span>13</span><span>14</span><span>15</span><span>16</span>
+                </div>
+              </div>
+              <span class="font-size-value">{{ settings.font_size || 14 }}px</span>
+            </div>
+          </div>
           <div class="btn-group">
             <button class="btn btn-primary" @click="saveTheme">保存主题</button>
-            <button class="btn" @click="settings.theme_color = '#6c5ce7'">恢复默认</button>
+            <button class="btn" @click="resetTheme">恢复默认</button>
           </div>
+        </div>
+
+        <!-- 文档样式 -->
+        <div v-if="activeTab === 'mdtheme'" class="settings-panel">
+          <h3>文档样式</h3>
+          <p class="panel-desc">选择 Markdown 渲染后的 CSS 样式主题</p>
+          <div class="md-theme-grid">
+            <div
+              v-for="t in mdThemes"
+              :key="t.id"
+              class="md-theme-card"
+              :class="{ active: settings.markdown_theme === t.id }"
+              @click="settings.markdown_theme = t.id"
+            >
+              <div class="md-theme-preview" :style="{ background: t.bg, border: '1px solid ' + t.border }">
+                <div :style="{ fontSize: '14px', fontWeight: 600, marginBottom: '4px', color: t.title }">标题示例</div>
+                <div :style="{ fontSize: '12px', color: t.text, lineHeight: '1.6' }">正文，<code :style="{ background: t.codeBg, padding: '1px 4px', borderRadius: '3px', fontSize: '11px', color: t.code }">代码</code></div>
+                <div :style="{ marginTop: '4px', borderLeft: '3px solid ' + t.quote, padding: '3px 6px', background: t.quoteBg, fontSize: '11px', color: t.text, opacity: 0.7 }">引用</div>
+              </div>
+              <div class="md-theme-name">{{ t.name }}</div>
+            </div>
+          </div>
+          <button class="btn btn-primary" style="margin-top: 16px;" @click="saveMdTheme">保存</button>
         </div>
 
         <!-- Git 同步 -->
@@ -300,7 +342,8 @@ const activeTab = ref('dashboard')
 const tabs = [
   { id: 'dashboard', label: '数据大盘' },
   { id: 'basic', label: '基础设置' },
-  { id: 'theme', label: '主题颜色' },
+  { id: 'theme', label: '外观主题' },
+  { id: 'mdtheme', label: '文档样式' },
   { id: 'git', label: 'Git 同步' },
   { id: 'storage', label: '本地存储' },
   { id: 'conflict', label: '冲突管理' },
@@ -309,10 +352,16 @@ const tabs = [
   { id: 'update', label: '检查更新' }
 ]
 
+const mdThemes = [
+  { id: 'default', name: '默认', bg: '#fff', title: '#1a1a1a', text: '#333', code: '#e74c3c', codeBg: '#f5f5f5', quote: 'var(--tc)', quoteBg: '#faf9ff', border: '#eee' },
+  { id: 'github', name: 'GitHub', bg: '#fff', title: '#24292f', text: '#24292f', code: '#24292f', codeBg: 'rgba(175,184,193,0.2)', quote: '#d0d7de', quoteBg: '#fff', border: '#d8dee4' },
+  { id: 'juejin', name: '掘金', bg: '#fff', title: '#1d2129', text: '#252933', code: '#ff502c', codeBg: '#fff5f5', quote: '#cbcbcb', quoteBg: '#f8f8f8', border: '#ececec' },
+]
+
 const presetColors = [
-  { value: '#6c5ce7', label: '默认紫' },
+  { value: '#02af6a', label: '默认绿' },
   { value: '#3498db', label: '蓝' },
-  { value: '#2ecc71', label: '绿' },
+  { value: '#6c5ce7', label: '紫' },
   { value: '#e74c3c', label: '红' },
   { value: '#f39c12', label: '橙' },
   { value: '#1abc9c', label: '青' },
@@ -337,23 +386,6 @@ const indexMsg = ref('')
 const updateChecking = ref(false)
 const updateChecked = ref(false)
 const updateResult = ref<any>({})
-
-const mdThemes = [
-  { id: 'default', name: '默认', bg: '#fff', fg: '#333' },
-  { id: 'github', name: 'GitHub', bg: '#fff', fg: '#24292e' },
-  { id: 'github-dark', name: 'GitHub Dark', bg: '#0d1117', fg: '#c9d1d9' },
-  { id: 'juejin', name: '掘金', bg: '#fff', fg: '#252933' },
-  { id: 'smartblue', name: 'Smart Blue', bg: '#fff', fg: '#3f4a56' },
-  { id: 'cyanosis', name: 'Cyanosis', bg: '#fff', fg: '#3b4351' },
-  { id: 'fancy', name: 'Fancy', bg: '#fef9f3', fg: '#3e352a' },
-  { id: 'hydrogen', name: 'Hydrogen', bg: '#fafcff', fg: '#333' },
-  { id: 'condensed-night-purple', name: '凝夜紫', bg: '#2b2d42', fg: '#e0def4' },
-  { id: 'vuepress', name: 'VuePress', bg: '#fff', fg: '#2c3e50' },
-  { id: 'vue-pro', name: 'Vue Pro', bg: '#fff', fg: '#34495e' },
-  { id: 'chinese-red', name: '中国红', bg: '#fff5f5', fg: '#660000' },
-  { id: 'awesome-green', name: 'Awesome Green', bg: '#f0fff4', fg: '#1a3a1a' },
-  { id: 'geek-black', name: 'Geek Black', bg: '#1e1e1e', fg: '#d4d4d4' }
-]
 
 async function loadSettings() {
   settings.value = await api.getSettings()
@@ -390,15 +422,23 @@ async function saveBasic() {
 }
 
 async function saveTheme() {
-  await api.saveSettings({ theme_color: settings.value.theme_color })
+  await api.saveSettings({
+    theme_color: settings.value.theme_color,
+    font_size: String(settings.value.font_size || 14)
+  })
   toast('保存成功')
   reloadSettings()
 }
 
-async function selectMdTheme(id: string) {
-  settings.value.markdown_theme = id
-  await api.saveSettings({ markdown_theme: id })
-  toast('主题已更换')
+function resetTheme() {
+  settings.value.theme_color = '#02af6a'
+  settings.value.font_size = 14
+}
+
+async function saveMdTheme() {
+  await api.saveSettings({ markdown_theme: settings.value.markdown_theme })
+  toast('文档样式已保存')
+  reloadSettings()
 }
 
 async function saveGit() {
@@ -571,7 +611,7 @@ onMounted(async () => {
 .settings-tab {
   padding: 10px 24px;
   cursor: pointer;
-  font-size: 14px;
+  font-size: var(--fs, 14px);
   color: #555;
   transition: all 0.15s;
 }
@@ -579,7 +619,7 @@ onMounted(async () => {
 .settings-tab.active {
   color: var(--tc);
   font-weight: 600;
-  background: #f0f0ff;
+  background: color-mix(in srgb, var(--tc) 10%, transparent);
   border-right: 3px solid var(--tc);
 }
 .settings-content {
@@ -597,7 +637,7 @@ onMounted(async () => {
   padding: 8px 12px;
   border: 1px solid #ddd;
   border-radius: 6px;
-  font-size: 14px;
+  font-size: var(--fs, 14px);
   outline: none;
 }
 .form-group input:focus { border-color: var(--tc); }
@@ -754,4 +794,57 @@ onMounted(async () => {
   font-size: 13px;
   margin-bottom: 16px;
 }
+/* Font size */
+.font-size-row { display: flex; align-items: flex-start; gap: 12px; max-width: 400px; }
+.font-size-track { flex: 1; }
+.font-size-slider {
+  width: 100%;
+  -webkit-appearance: none;
+  height: 4px;
+  background: #e0e0e0;
+  border-radius: 2px;
+  outline: none;
+  margin: 6px 0 0;
+}
+.font-size-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--tc);
+  cursor: pointer;
+}
+.font-size-value {
+  font-size: var(--fs, 14px);
+  font-weight: 600;
+  color: var(--tc);
+  width: 36px;
+  flex-shrink: 0;
+  text-align: center;
+  font-family: monospace;
+  line-height: 16px;
+  margin-top: 3px;
+}
+.font-size-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #bbb;
+  margin-top: 4px;
+  padding: 0 6px;
+}
+
+.panel-desc { font-size: 13px; color: #666; margin-bottom: 16px; }
+.md-theme-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; }
+.md-theme-card {
+  border: 2px solid #e8e8e8;
+  border-radius: 8px;
+  padding: 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.md-theme-card:hover { border-color: #bbb; }
+.md-theme-card.active { border-color: var(--tc); box-shadow: 0 0 0 1px var(--tc); }
+.md-theme-preview { border-radius: 6px; padding: 10px; }
+.md-theme-name { text-align: center; font-size: 12px; color: #666; margin-top: 6px; font-weight: 500; }
 </style>

@@ -84,7 +84,7 @@ defineExpose({ show })
   font-size: 14px;
   background: #fff;
 }
-.btn-primary { background: var(--tc, #6c5ce7); color: #fff; border-color: var(--tc, #6c5ce7); }
+.btn-primary { background: var(--tc, #02af6a); color: #fff; border-color: var(--tc, #02af6a); }
 .btn-cancel:hover { background: #f5f5f5; }
 .btn-primary:hover { opacity: 0.85; }
 </style>
