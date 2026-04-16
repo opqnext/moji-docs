@@ -1,5 +1,5 @@
 appId: com.opqnext.moji-docs
-productName: Moji文档
+productName: MojiDocs
 directories:
   buildResources: assets
   output: release

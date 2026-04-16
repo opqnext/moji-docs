@@ -8,7 +8,7 @@ import { getLfsStatus, initLfs } from '../lfs'
 import * as syncQueue from '../sync-queue'
 
 const DEFAULTS: Record<string, string> = {
-  site_name: 'Moji文档',
+  site_name: 'MojiDocs',
   footer_text: 'Copyright © 2018~2025. opqnext All rights reserved.',
   theme_color: '#6c5ce7',
   markdown_theme: 'default',

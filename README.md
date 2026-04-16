@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="assets/icon.png" alt="Moji文档" width="128">
+  <img src="assets/icon.png" alt="MojiDocs" width="128">
 </p>
 
-<h1 align="center">Moji文档 (MojiDocs)</h1>
+<h1 align="center">MojiDocs</h1>
 
 <p align="center">
   <strong>离线优先的 Markdown Wiki 桌面应用</strong><br>
@@ -30,7 +30,7 @@
 
 ## 简介
 
-Moji文档是一款跨平台的 Markdown Wiki 桌面应用，基于 **Electron + Vue 3 + SQLite** 构建。
+MojiDocs 是一款跨平台的 Markdown Wiki 桌面应用，基于 **Electron + Vue 3 + SQLite** 构建。
 
 核心理念：**`.md` 文件是唯一数据源**，通过 Git 跟踪和同步；SQLite 仅作为全文搜索索引，可随时从文件重建。你的笔记以标准 Markdown 格式存储在本地文件系统中，完全兼容 Obsidian、Hugo、Hexo 等工具。
 

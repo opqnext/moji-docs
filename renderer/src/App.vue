@@ -15,7 +15,7 @@ import api from './api'
 const toastRef = ref()
 const confirmRef = ref()
 const themeColor = ref('#6c5ce7')
-const siteName = ref('Moji文档')
+const siteName = ref('MojiDocs')
 const footerText = ref('Copyright © 2018~2025. opqnext All rights reserved.')
 
 provide('toast', (msg: string, type?: string) => toastRef.value?.show(msg, type))

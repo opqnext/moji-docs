@@ -5,7 +5,7 @@
         <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--tc)" stroke-width="1.5">
           <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
         </svg>
-        <h1>Moji文档</h1>
+        <h1>MojiDocs</h1>
         <p class="setup-desc">Markdown Wiki 桌面应用</p>
       </div>
 
@@ -54,7 +54,7 @@
           <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#27ae60" stroke-width="2">
             <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" />
           </svg>
-          <p>笔记目录已就绪，开始使用 Moji文档 吧！</p>
+          <p>笔记目录已就绪，开始使用 MojiDocs 吧！</p>
           <button class="btn btn-primary" @click="enterApp">进入应用</button>
         </div>
         <p v-if="errorMsg" class="error-text">{{ errorMsg }}</p>

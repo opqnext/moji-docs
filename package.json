@@ -1,7 +1,7 @@
 {
   "name": "moji-docs",
   "version": "1.0.0",
-  "description": "Moji文档 - Markdown Wiki 桌面应用",
+  "description": "MojiDocs - Markdown Wiki 桌面应用",
   "main": "out/main/index.js",
   "scripts": {
     "dev": "unset ELECTRON_RUN_AS_NODE && electron-vite dev",

@@ -47,7 +47,7 @@ function createWindow(): void {
     height: 800,
     minWidth: 900,
     minHeight: 600,
-    title: 'Moji文档',
+    title: 'MojiDocs',
     icon: appIcon,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),

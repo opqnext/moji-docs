@@ -2,7 +2,7 @@ import { app, Menu, BrowserWindow, shell } from 'electron'
 import { checkForUpdate, showUpdateDialog, UPDATE_REPO } from './updater'
 
 export function buildAppMenu(): void {
-  const appName = 'Moji文档'
+  const appName = 'MojiDocs'
 
   const template: Electron.MenuItemConstructorOptions[] = [
     {
