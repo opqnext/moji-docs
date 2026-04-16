@@ -25,16 +25,39 @@ function compareVersions(current: string, latest: string): number {
 }
 
 function pickAssetUrl(assets: any[]): string | undefined {
-  const platform = process.platform
-  const patterns: Record<string, RegExp> = {
-    darwin: /\.(dmg|zip)$/i,
-    win32: /\.(exe|msi)$/i,
-    linux: /\.(AppImage|deb|rpm)$/i
+  const platform = process.platform as 'darwin' | 'win32' | 'linux'
+  const arch = process.arch as 'x64' | 'arm64' | 'ia32'
+
+  const platformExts: Record<string, string[]> = {
+    darwin: ['dmg'],
+    win32: ['exe', 'msi'],
+    linux: ['AppImage', 'deb', 'rpm']
   }
-  const re = patterns[platform]
-  if (!re) return undefined
-  const match = assets.find((a: any) => re.test(a.name))
-  return match?.browser_download_url
+
+  const archSuffix: Record<string, string> = {
+    x64: '',
+    arm64: '-arm64',
+    ia32: '-ia32'
+  }
+
+  const exts = platformExts[platform]
+  if (!exts) return undefined
+
+  const suffix = archSuffix[arch] || ''
+
+  for (const ext of exts) {
+    const archSpecific = new RegExp(`-${platform}${suffix}\\.${ext}$`, 'i')
+    const archMatch = assets.find((a: any) => archSpecific.test(a.name))
+    if (archMatch) return archMatch.browser_download_url
+
+    if (suffix && arch === 'arm64') {
+      const x64Generic = new RegExp(`-${platform}\\.${ext}$`, 'i')
+      const fallback = assets.find((a: any) => x64Generic.test(a.name))
+      if (fallback) return fallback.browser_download_url
+    }
+  }
+
+  return undefined
 }
 
 function buildApiUrl(input: string): string {
@@ -93,7 +116,8 @@ function parseCustomManifest(data: any): CheckUpdateResult {
   const latestVersion = data.version || ''
   const hasUpdate = compareVersions(currentVersion, latestVersion) > 0
 
-  const platformKey = { darwin: 'mac', win32: 'win', linux: 'linux' }[process.platform] || ''
+  const platformMap: Record<string, string> = { darwin: 'mac', win32: 'win', linux: 'linux' }
+  const platformKey = platformMap[process.platform] || ''
   const downloadUrl = data.downloads?.[platformKey]
 
   return {
