@@ -8,6 +8,12 @@ import * as syncQueue from './sync-queue'
 
 let syncTimer: ReturnType<typeof setInterval> | null = null
 
+function localTimeString(): string {
+  const d = new Date()
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+}
+
 function getGitConfig(db: Database.Database): { url: string; branch: string; interval: number } {
   const rows = db.prepare('SELECT key, value FROM app_settings').all() as any[]
   const settings: Record<string, string> = {}
@@ -68,8 +74,7 @@ export async function commitChanges(docsRoot: string): Promise<void> {
   const status = await git.status()
 
   if (status.files.length > 0) {
-    const now = new Date().toISOString().replace('T', ' ').substring(0, 19)
-    await git.commit(`sync: ${now}`)
+    await git.commit(`sync: ${localTimeString()}`)
   }
 }
 
@@ -88,8 +93,7 @@ export async function syncGit(db: Database.Database, docsRoot: string): Promise<
     await git.add('.')
     const status = await git.status()
     if (status.files.length > 0) {
-      const now = new Date().toISOString().replace('T', ' ').substring(0, 19)
-      await git.commit(`sync: ${now}`)
+      await git.commit(`sync: ${localTimeString()}`)
     }
 
     let remoteHasBranch = false

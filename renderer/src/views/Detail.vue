@@ -75,7 +75,7 @@
           <div class="doc-header">
             <h1>{{ detail.doc.title }}</h1>
             <div class="doc-meta">
-              <span>{{ detail.doc.updated_at }}</span>
+              <span>更新于 {{ detail.doc.updated_at }}</span>
               <div v-if="detail.doc.tags" class="doc-tags">
                 <span v-for="tag in detail.doc.tags.split(',')" :key="tag" class="doc-tag">{{ tag.trim() }}</span>
               </div>
@@ -247,7 +247,7 @@ async function togglePin() {
 }
 
 async function openMoveModal() {
-  const targetPath = await moveRef.value?.show()
+  const targetPath = await moveRef.value?.show(detail.value.doc.file_path)
   if (targetPath === null || targetPath === undefined) return
   try {
     const newPath = await api.moveDoc(detail.value.doc.file_path, targetPath)
@@ -380,12 +380,36 @@ watch(() => markdownTheme?.value, (val) => {
   loadThemeCss(val || 'default')
 }, { immediate: true })
 
+function injectCopyButtons(container: HTMLElement) {
+  container.querySelectorAll('pre').forEach(pre => {
+    if (pre.querySelector('.code-copy-btn')) return
+    const btn = document.createElement('button')
+    btn.className = 'code-copy-btn'
+    btn.textContent = '复制'
+    btn.addEventListener('click', () => {
+      navigator.clipboard.writeText(pre.textContent || '')
+      btn.textContent = '已复制'
+      setTimeout(() => btn.textContent = '复制', 1500)
+    })
+    pre.appendChild(btn)
+  })
+}
+
 watch(detail, (val) => {
   if (val) {
     nextTick(() => {
       contentRef.value?.addEventListener('scroll', onContentScroll)
+      const body = contentRef.value?.querySelector('.content-body')
+      if (body) injectCopyButtons(body as HTMLElement)
     })
   }
+})
+
+watch(renderedHtml, () => {
+  nextTick(() => {
+    const body = contentRef.value?.querySelector('.content-body')
+    if (body) injectCopyButtons(body as HTMLElement)
+  })
 })
 
 onMounted(() => {

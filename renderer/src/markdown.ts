@@ -20,7 +20,7 @@ export function setDocsRoot(root: string): void {
   docsRoot = root
 }
 
-function resolveImageSrc(href: string): string {
+export function resolveImageSrc(href: string): string {
   if (!href) return href
   if (href.startsWith('http://') || href.startsWith('https://') || href.startsWith('data:')) {
     return href

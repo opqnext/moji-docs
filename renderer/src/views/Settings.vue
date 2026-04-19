@@ -353,7 +353,7 @@ const tabs = [
 ]
 
 const mdThemes = [
-  { id: 'default', name: '默认', bg: '#fff', title: '#1a1a1a', text: '#333', code: '#e74c3c', codeBg: '#f5f5f5', quote: 'var(--tc)', quoteBg: '#faf9ff', border: '#eee' },
+  { id: 'default', name: '默认', bg: '#fff', title: '#1a1a1a', text: '#333', code: '#e74c3c', codeBg: '#f5f5f5', quote: '#4caf50', quoteBg: '#f9f9f9', border: '#eee' },
   { id: 'github', name: 'GitHub', bg: '#fff', title: '#24292f', text: '#24292f', code: '#24292f', codeBg: 'rgba(175,184,193,0.2)', quote: '#d0d7de', quoteBg: '#fff', border: '#d8dee4' },
   { id: 'juejin', name: '掘金', bg: '#fff', title: '#1d2129', text: '#252933', code: '#ff502c', codeBg: '#fff5f5', quote: '#cbcbcb', quoteBg: '#f8f8f8', border: '#ececec' },
 ]

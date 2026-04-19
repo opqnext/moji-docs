@@ -80,6 +80,10 @@ async function fetchJson(url: string): Promise<any> {
 
     let body = ''
     request.on('response', (response) => {
+      if (response.statusCode === 403) {
+        reject(new Error('GitHub API 请求频率超限，请稍后再试（未认证请求限 60 次/小时）'))
+        return
+      }
       if (response.statusCode !== 200) {
         reject(new Error(`HTTP ${response.statusCode}`))
         return
