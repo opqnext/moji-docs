@@ -7,10 +7,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, provide, onMounted, watch } from 'vue'
+import { ref, provide, onMounted, onBeforeUnmount, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import Toast from './components/Toast.vue'
 import ConfirmModal from './components/ConfirmModal.vue'
 import api from './api'
+
+const router = useRouter()
 
 const toastRef = ref()
 const confirmRef = ref()
@@ -40,9 +43,24 @@ async function loadSettings() {
 
 provide('reloadSettings', loadSettings)
 
+let removeNavigateListener: (() => void) | null = null
+
+watch(themeColor, (val) => {
+  document.documentElement.style.setProperty('--tc', val)
+}, { immediate: true })
+
 watch(fontSize, (val) => {
   document.documentElement.style.setProperty('--fs', val + 'px')
 }, { immediate: true })
 
-onMounted(loadSettings)
+onMounted(() => {
+  loadSettings()
+  removeNavigateListener = window.mojiApi.on('navigate', (path: string) => {
+    router.push(path)
+  })
+})
+
+onBeforeUnmount(() => {
+  removeNavigateListener?.()
+})
 </script>

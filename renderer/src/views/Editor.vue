@@ -264,10 +264,12 @@ function handleKeydown(e: KeyboardEvent) {
   if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
     e.preventDefault()
     saveDoc()
+    return
   }
   if ((e.ctrlKey || e.metaKey) && e.key === 's') {
     e.preventDefault()
     saveDoc()
+    return
   }
   if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
     if (e.shiftKey) {
@@ -277,6 +279,83 @@ function handleKeydown(e: KeyboardEvent) {
       e.preventDefault()
       editorUndo()
     }
+    return
+  }
+
+  const ta = textareaRef.value
+  if (!ta) return
+
+  if (e.key === 'Enter') {
+    const pos = ta.selectionStart
+    const text = content.value
+    const lineStart = text.lastIndexOf('\n', pos - 1) + 1
+    const currentLine = text.substring(lineStart, pos)
+
+    const orderedMatch = currentLine.match(/^(\s*)(\d+)\.\s(.*)$/)
+    const unorderedMatch = currentLine.match(/^(\s*)([-*])\s(.*)$/)
+
+    if (orderedMatch) {
+      const [, indent, numStr, body] = orderedMatch
+      if (!body.trim()) {
+        e.preventDefault()
+        takeSnapshot()
+        content.value = text.substring(0, lineStart) + text.substring(pos)
+        nextTick(() => { ta.selectionStart = ta.selectionEnd = lineStart; updatePreview(); markUnsaved(); scheduleAutoSave() })
+      } else {
+        e.preventDefault()
+        takeSnapshot()
+        const nextNum = parseInt(numStr) + 1
+        const insert = `\n${indent}${nextNum}. `
+        content.value = text.substring(0, pos) + insert + text.substring(pos)
+        nextTick(() => { ta.selectionStart = ta.selectionEnd = pos + insert.length; updatePreview(); markUnsaved(); scheduleAutoSave() })
+      }
+      return
+    }
+
+    if (unorderedMatch) {
+      const [, indent, marker, body] = unorderedMatch
+      if (!body.trim()) {
+        e.preventDefault()
+        takeSnapshot()
+        content.value = text.substring(0, lineStart) + text.substring(pos)
+        nextTick(() => { ta.selectionStart = ta.selectionEnd = lineStart; updatePreview(); markUnsaved(); scheduleAutoSave() })
+      } else {
+        e.preventDefault()
+        takeSnapshot()
+        const insert = `\n${indent}${marker} `
+        content.value = text.substring(0, pos) + insert + text.substring(pos)
+        nextTick(() => { ta.selectionStart = ta.selectionEnd = pos + insert.length; updatePreview(); markUnsaved(); scheduleAutoSave() })
+      }
+      return
+    }
+  }
+
+  if (e.key === 'Tab') {
+    const pos = ta.selectionStart
+    const text = content.value
+    const lineStart = text.lastIndexOf('\n', pos - 1) + 1
+    const currentLine = text.substring(lineStart, text.indexOf('\n', pos) === -1 ? text.length : text.indexOf('\n', pos))
+
+    if (/^\s*([-*]|\d+\.)\s/.test(currentLine)) {
+      e.preventDefault()
+      takeSnapshot()
+      if (e.shiftKey) {
+        const dedented = currentLine.replace(/^  /, '')
+        if (dedented !== currentLine) {
+          content.value = text.substring(0, lineStart) + dedented + text.substring(lineStart + currentLine.length)
+          nextTick(() => { ta.selectionStart = ta.selectionEnd = Math.max(lineStart, pos - 2); updatePreview(); markUnsaved(); scheduleAutoSave() })
+        }
+      } else {
+        content.value = text.substring(0, lineStart) + '  ' + text.substring(lineStart)
+        nextTick(() => { ta.selectionStart = ta.selectionEnd = pos + 2; updatePreview(); markUnsaved(); scheduleAutoSave() })
+      }
+      return
+    }
+
+    e.preventDefault()
+    takeSnapshot()
+    content.value = text.substring(0, pos) + '  ' + text.substring(pos)
+    nextTick(() => { ta.selectionStart = ta.selectionEnd = pos + 2; updatePreview(); markUnsaved(); scheduleAutoSave() })
   }
 }
 

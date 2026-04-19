@@ -14,7 +14,12 @@
 
     <!-- Search results -->
     <div v-if="searchKey && searchResults.length > 0" class="main" style="padding: 24px;">
-      <h4 style="margin-bottom: 12px; color: #666;">搜索结果 ({{ searchResults.length }})</h4>
+      <h4 style="margin-bottom: 12px; color: #666; display: flex; align-items: center; gap: 8px;">
+        <span class="search-back-btn" @click="searchKey = ''; searchResults = []" title="返回">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+        </span>
+        搜索结果 ({{ searchResults.length }})
+      </h4>
       <div v-for="item in searchResults" :key="item.file_path" class="search-result-item" @click="goDoc(item)">
         <div class="search-result-header">
           <svg class="search-doc-icon" v-if="item.is_directory" viewBox="0 0 24 24" fill="none" stroke="var(--tc)" stroke-width="1.5"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
@@ -23,6 +28,20 @@
           <span class="doc-time">{{ formatTime(item.updated_at) }}</span>
         </div>
         <div v-if="item.content_snippet" class="search-snippet" v-html="highlightResult(item.content_snippet)"></div>
+      </div>
+    </div>
+
+    <!-- Search empty state -->
+    <div v-else-if="searchKey && searchResults.length === 0" class="main" style="padding: 24px;">
+      <h4 style="margin-bottom: 12px; color: #666; display: flex; align-items: center; gap: 8px;">
+        <span class="search-back-btn" @click="searchKey = ''; searchResults = []" title="返回">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+        </span>
+        搜索结果
+      </h4>
+      <div class="search-empty">
+        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#ddd" stroke-width="1"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <p>暂无搜索结果</p>
       </div>
     </div>
 
@@ -104,7 +123,9 @@
             <h4>置顶</h4>
             <div v-if="pinned.length" class="pin-items">
               <div v-for="item in pinned" :key="item.file_path" class="pin-item" :title="item.title" @click="goDoc(item)">
-                {{ item.title }}
+                <svg v-if="item.is_directory" class="pin-icon" viewBox="0 0 24 24" fill="none" stroke="var(--tc)" stroke-width="1.5"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
+                <svg v-else class="pin-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/></svg>
+                <span class="pin-text">{{ item.title }}</span>
               </div>
             </div>
             <div v-else class="empty-tip">暂无置顶</div>
@@ -279,6 +300,27 @@ onMounted(async () => {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.search-back-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  cursor: pointer;
+  color: #999;
+  transition: all 0.15s;
+}
+.search-back-btn:hover { background: #f0f0f0; color: var(--tc); }
+.search-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 0;
+  color: #ccc;
+}
+.search-empty p { margin-top: 12px; font-size: 14px; color: #999; }
 .search-snippet {
   margin-top: 4px;
   margin-left: 26px;

@@ -29,11 +29,17 @@ export function updateState(state: SyncState, extra?: Partial<SyncStatus>): void
   broadcastStatus()
 }
 
+function localTimeString(): string {
+  const d = new Date()
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+}
+
 export function markSynced(): void {
   failureCount = 0
   updateState('synced', {
     pendingCommits: 0,
-    lastSyncTime: new Date().toISOString().replace('T', ' ').substring(0, 19),
+    lastSyncTime: localTimeString(),
     errorMessage: ''
   })
 }

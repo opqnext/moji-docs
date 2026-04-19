@@ -125,11 +125,11 @@ a:hover { opacity: 0.8; }
 .content-body {
   --md-fg: #333;
   --md-heading: #1a1a1a;
-  --md-link: var(--tc);
-  --md-code-bg: #f6f8fa;
-  --md-code-fg: #476582;
+  --md-link: #0269c8;
+  --md-code-bg: #f5f5f5;
+  --md-code-fg: #e74c3c;
   --md-quote-bg: #f9f9f9;
-  --md-quote-border: var(--tc);
+  --md-quote-border: #4caf50;
   --md-quote-fg: #666;
   --md-border: #eee;
   --md-th-bg: #f5f5f5;
@@ -174,9 +174,35 @@ a:hover { opacity: 0.8; }
   border: 1px solid var(--md-border);
   padding: 8px 12px;
   text-align: left;
+  min-height: 1.6em;
 }
 .content-body th { background: var(--md-th-bg); font-weight: 600; }
 .content-body img { max-width: 100%; border-radius: 4px; }
+.content-body pre { position: relative; }
+.content-body pre .code-copy-btn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  background: rgba(255,255,255,0.85);
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  padding: 3px 8px;
+  font-size: 11px;
+  color: #666;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s;
+  z-index: 2;
+}
+.content-body pre:hover .code-copy-btn,
+.content-body pre:focus-within .code-copy-btn {
+  opacity: 1;
+}
+.content-body pre .code-copy-btn:hover {
+  background: var(--tc, #02af6a);
+  color: #fff;
+  border-color: var(--tc, #02af6a);
+}
 .content-body a { color: var(--md-link); }
 .content-body ul, .content-body ol { padding-left: 24px; margin: 0 0 12px; }
 .content-body li { margin: 4px 0; }
@@ -188,7 +214,9 @@ a:hover { opacity: 0.8; }
 .pin-section h4 { font-size: var(--fs, 14px); color: #666; margin-bottom: 8px; }
 .pin-items { display: flex; flex-wrap: wrap; gap: 8px; }
 .pin-item {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   padding: 4px 12px;
   background: #f5f3ff;
   border-radius: 6px;
@@ -202,6 +230,8 @@ a:hover { opacity: 0.8; }
   transition: background 0.15s;
 }
 .pin-item:hover { background: color-mix(in srgb, var(--tc) 10%, transparent); }
+.pin-icon { width: 14px; height: 14px; flex-shrink: 0; }
+.pin-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* Grid items for navigation */
 .grid-list { display: flex; flex-wrap: wrap; gap: 8px; }

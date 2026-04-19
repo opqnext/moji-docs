@@ -218,21 +218,50 @@ export function registerDocIpc(db: Database.Database, docsRoot: string): void {
     const fullPath = join(docsRoot, filePath)
     if (!existsSync(fullPath)) throw new Error('文件不存在')
 
-    const fileName = basename(filePath)
-    const newFilePath = targetParentPath ? `${targetParentPath}/${fileName}` : fileName
-    const newFullPath = join(docsRoot, newFilePath)
+    let targetDir = targetParentPath
+    if (targetDir.endsWith('/_index.md') || targetDir === '_index.md') {
+      targetDir = dirname(targetDir)
+      if (targetDir === '.') targetDir = ''
+    }
 
-    if (filePath === newFilePath) return newFilePath
+    const isDirectory = filePath.endsWith('/_index.md') || filePath === '_index.md'
 
-    mkdirSync(dirname(newFullPath), { recursive: true })
-    renameSync(fullPath, newFullPath)
-    cleanEmptyParents(dirname(fullPath), docsRoot)
+    if (isDirectory) {
+      let srcDirRel = dirname(filePath)
+      if (srcDirRel === '.') srcDirRel = ''
+      const dirName = basename(srcDirRel)
+      const newDirRel = targetDir ? `${targetDir}/${dirName}` : dirName
+      const srcDirFull = join(docsRoot, srcDirRel)
+      const newDirFull = join(docsRoot, newDirRel)
 
-    markSelfWrite(newFilePath)
-    removeFromIndex(db, filePath)
-    reindexSingleFile(db, docsRoot, newFilePath)
-    scheduleGitCommit(docsRoot)
-    return newFilePath
+      if (srcDirRel === newDirRel) return filePath
+      if (existsSync(newDirFull)) throw new Error(`目标位置已存在同名目录 "${dirName}"`)
+
+      mkdirSync(dirname(newDirFull), { recursive: true })
+      renameSync(srcDirFull, newDirFull)
+      cleanEmptyParents(dirname(srcDirFull), docsRoot)
+
+      incrementalReindex(db, docsRoot)
+      scheduleGitCommit(docsRoot)
+      return `${newDirRel}/_index.md`
+    } else {
+      const fileName = basename(filePath)
+      const newFilePath = targetDir ? `${targetDir}/${fileName}` : fileName
+      const newFullPath = join(docsRoot, newFilePath)
+
+      if (filePath === newFilePath) return newFilePath
+      if (existsSync(newFullPath)) throw new Error(`目标位置已存在同名文件 "${fileName}"`)
+
+      mkdirSync(dirname(newFullPath), { recursive: true })
+      renameSync(fullPath, newFullPath)
+      cleanEmptyParents(dirname(fullPath), docsRoot)
+
+      markSelfWrite(newFilePath)
+      removeFromIndex(db, filePath)
+      reindexSingleFile(db, docsRoot, newFilePath)
+      scheduleGitCommit(docsRoot)
+      return newFilePath
+    }
   })
 
   ipcMain.handle('doc:pin', (_e, filePath: string, isPinned: boolean) => {
