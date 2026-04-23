@@ -59,9 +59,15 @@ export function nowString(): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
 }
 
+const MAX_FILENAME_CHARS = 100
+
 export function titleToFilename(title: string): string {
   if (!title.trim()) return 'untitled'
-  return title.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').trim()
+  let name = title.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').trim()
+  if (Array.from(name).length > MAX_FILENAME_CHARS) {
+    name = Array.from(name).slice(0, MAX_FILENAME_CHARS).join('')
+  }
+  return name
 }
 
 export function filenameToTitle(filename: string): string {

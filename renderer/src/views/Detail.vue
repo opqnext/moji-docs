@@ -339,8 +339,13 @@ async function onDrop(e: DragEvent) {
   }
   if (mdFiles.length === 0) { toast('请拖放 .md 文件', 'warning'); return }
   const parentPath = detail.value.parentPath || ''
-  await api.importMd(mdFiles, parentPath)
-  toast(`导入了 ${mdFiles.length} 个文件`)
+  const results = await api.importMd(mdFiles, parentPath)
+  const renamedCount = Array.isArray(results) ? results.filter((r: any) => r.renamed).length : 0
+  if (renamedCount > 0) {
+    toast(`导入完成，其中 ${renamedCount} 个文件因同名已自动重命名`)
+  } else {
+    toast(`导入了 ${mdFiles.length} 个文件`)
+  }
   loadDetail()
 }
 
@@ -395,11 +400,21 @@ function injectCopyButtons(container: HTMLElement) {
   })
 }
 
+let scrollCleanup: (() => void) | null = null
+
 watch(detail, (val) => {
+  if (scrollCleanup) {
+    scrollCleanup()
+    scrollCleanup = null
+  }
   if (val) {
     nextTick(() => {
-      contentRef.value?.addEventListener('scroll', onContentScroll)
-      const body = contentRef.value?.querySelector('.content-body')
+      const el = contentRef.value
+      if (el) {
+        el.addEventListener('scroll', onContentScroll)
+        scrollCleanup = () => el.removeEventListener('scroll', onContentScroll)
+      }
+      const body = el?.querySelector('.content-body')
       if (body) injectCopyButtons(body as HTMLElement)
     })
   }
@@ -419,6 +434,10 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   document.removeEventListener('click', handleDocClick)
+  if (scrollCleanup) {
+    scrollCleanup()
+    scrollCleanup = null
+  }
   if (themeLink) {
     themeLink.remove()
     themeLink = null

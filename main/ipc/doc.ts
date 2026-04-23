@@ -336,7 +336,9 @@ export function registerDocIpc(db: Database.Database, docsRoot: string): void {
 
   ipcMain.handle('doc:search', (_e, keyword: string) => {
     if (!keyword || keyword.trim().length === 0) return []
+    const sanitizedFts = keyword.replace(/[":*^~(){}[\]\\]/g, '').trim()
     try {
+      if (!sanitizedFts) throw new Error('empty after sanitize')
       return db.prepare(`
         SELECT
           d.rowid,
@@ -353,11 +355,12 @@ export function registerDocIpc(db: Database.Database, docsRoot: string): void {
         WHERE doc_fts MATCH ?
         ORDER BY rank
         LIMIT 30
-      `).all(keyword + '*')
+      `).all(sanitizedFts + '*')
     } catch {
+      const escapedLike = keyword.replace(/[%_\\]/g, '\\$&')
       return db.prepare(
-        "SELECT rowid, file_path, title, is_directory, updated_at, parent_path FROM doc_index WHERE title LIKE ? OR content LIKE ? LIMIT 30"
-      ).all(`%${keyword}%`, `%${keyword}%`)
+        "SELECT rowid, file_path, title, is_directory, updated_at, parent_path FROM doc_index WHERE title LIKE ? ESCAPE '\\' OR content LIKE ? ESCAPE '\\' LIMIT 30"
+      ).all(`%${escapedLike}%`, `%${escapedLike}%`)
     }
   })
 
@@ -370,12 +373,22 @@ export function registerDocIpc(db: Database.Database, docsRoot: string): void {
   })
 
   ipcMain.handle('doc:importMd', (_e, files: Array<{ name: string; content: string }>, parentPath: string) => {
-    const results: string[] = []
+    const results: Array<{ path: string; renamed: boolean; originalName: string }> = []
     for (const file of files) {
-      const title = file.name.replace(/\.md$/i, '')
+      let title = file.name.replace(/\.md$/i, '')
+      if (Array.from(title).length > 100) {
+        title = Array.from(title).slice(0, 100).join('')
+      }
       const fileName = titleToFilename(title) + '.md'
-      const filePath = parentPath ? `${parentPath}/${fileName}` : fileName
-      const fullPath = join(docsRoot, filePath)
+      let filePath = parentPath ? `${parentPath}/${fileName}` : fileName
+      const originalName = fileName
+
+      const uniqueResult = findUniquePath(join(docsRoot, filePath))
+      const fullPath = uniqueResult.fullPath
+      const renamed = uniqueResult.renamed
+      if (renamed) {
+        filePath = relative(docsRoot, fullPath).replace(/\\/g, '/')
+      }
 
       mkdirSync(dirname(fullPath), { recursive: true })
 
@@ -385,7 +398,7 @@ export function registerDocIpc(db: Database.Database, docsRoot: string): void {
       markSelfWrite(filePath)
       writeFileSync(fullPath, raw, 'utf-8')
       reindexSingleFile(db, docsRoot, filePath)
-      results.push(filePath)
+      results.push({ path: filePath, renamed, originalName })
     }
     return results
   })
@@ -438,6 +451,18 @@ function removeDirectoryRecursive(dirPath: string): void {
     }
   }
   rmdirSync(dirPath)
+}
+
+function findUniquePath(fullPath: string): { fullPath: string; renamed: boolean } {
+  if (!existsSync(fullPath)) return { fullPath, renamed: false }
+  const dir = dirname(fullPath)
+  const ext = fullPath.endsWith('.md') ? '.md' : ''
+  const base = basename(fullPath, ext)
+  for (let i = 1; i < 1000; i++) {
+    const candidate = join(dir, `${base}_${i}${ext}`)
+    if (!existsSync(candidate)) return { fullPath: candidate, renamed: true }
+  }
+  return { fullPath, renamed: false }
 }
 
 function cleanEmptyParents(dir: string, stopAt: string): void {

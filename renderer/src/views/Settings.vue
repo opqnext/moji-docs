@@ -532,6 +532,11 @@ async function doRebuildIndex() {
   try {
     const stats = await api.rebuildIndex()
     indexMsg.value = `重建完成：新增 ${stats.added}，更新 ${stats.updated}，删除 ${stats.removed}，总计 ${stats.total}`
+    if (stats.failures && stats.failures.length > 0) {
+      indexMsg.value += `\n⚠ ${stats.failures.length} 个文件解析失败：\n` +
+        stats.failures.map((f: any) => `  · ${f.filePath}: ${f.error}`).join('\n')
+      toast(`索引重建完成，但有 ${stats.failures.length} 个文件解析失败，请检查文件格式`, 'warning')
+    }
     await loadIndexInfo()
   } catch (e: any) {
     indexMsg.value = '重建失败: ' + (e.message || '未知错误')

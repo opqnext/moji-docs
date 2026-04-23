@@ -12,19 +12,14 @@ export interface IndexStats {
   removed: number
   unchanged: number
   total: number
+  failures: Array<{ filePath: string; error: string }>
 }
 
-export function incrementalReindex(db: Database.Database, docsRoot: string): IndexStats {
-  const stats: IndexStats = { added: 0, updated: 0, removed: 0, unchanged: 0, total: 0 }
+export function incrementalReindex(db: Database.Database, docsRoot: string, clearFirst = false): IndexStats {
+  const stats: IndexStats = { added: 0, updated: 0, removed: 0, unchanged: 0, total: 0, failures: [] }
   const diskFiles = new Map<string, { mtime: number }>()
 
   scanDirectory(docsRoot, docsRoot, diskFiles)
-
-  const existingRows = db.prepare('SELECT rowid, file_path, file_mtime, file_hash FROM doc_index').all() as any[]
-  const existingMap = new Map<string, { rowid: number; file_mtime: number; file_hash: string }>()
-  for (const row of existingRows) {
-    existingMap.set(row.file_path, { rowid: row.rowid, file_mtime: row.file_mtime, file_hash: row.file_hash })
-  }
 
   const upsert = db.prepare(`
     INSERT INTO doc_index (file_path, title, content, tags, is_pinned, is_directory, sort, parent_path, file_hash, file_mtime, created_at, updated_at)
@@ -44,6 +39,16 @@ export function incrementalReindex(db: Database.Database, docsRoot: string): Ind
   const deleteStmt = db.prepare('DELETE FROM doc_index WHERE file_path = ?')
 
   const tx = db.transaction(() => {
+    if (clearFirst) {
+      db.exec('DELETE FROM doc_index')
+    }
+
+    const existingRows = db.prepare('SELECT rowid, file_path, file_mtime, file_hash FROM doc_index').all() as any[]
+    const existingMap = new Map<string, { rowid: number; file_mtime: number; file_hash: string }>()
+    for (const row of existingRows) {
+      existingMap.set(row.file_path, { rowid: row.rowid, file_mtime: row.file_mtime, file_hash: row.file_hash })
+    }
+
     for (const [filePath, { mtime }] of diskFiles) {
       const existing = existingMap.get(filePath)
 
@@ -55,7 +60,7 @@ export function incrementalReindex(db: Database.Database, docsRoot: string): Ind
 
       const fullPath = join(docsRoot, filePath)
       const isDir = filePath.endsWith('/_index.md')
-      const entry = buildIndexEntry(fullPath, filePath, docsRoot, isDir)
+      const entry = buildIndexEntry(fullPath, filePath, docsRoot, isDir, stats.failures)
 
       if (!entry) {
         existingMap.delete(filePath)
@@ -97,9 +102,8 @@ export function incrementalReindex(db: Database.Database, docsRoot: string): Ind
 }
 
 export function fullRebuild(db: Database.Database, docsRoot: string): IndexStats {
-  db.exec('DELETE FROM doc_index')
   dropAndRebuildFts(db)
-  return incrementalReindex(db, docsRoot)
+  return incrementalReindex(db, docsRoot, true)
 }
 
 function scanDirectory(dir: string, docsRoot: string, result: Map<string, { mtime: number }>): void {
@@ -123,7 +127,10 @@ function scanDirectory(dir: string, docsRoot: string, result: Map<string, { mtim
   }
 }
 
-function buildIndexEntry(fullPath: string, filePath: string, docsRoot: string, isDir: boolean) {
+function buildIndexEntry(
+  fullPath: string, filePath: string, docsRoot: string, isDir: boolean,
+  failures?: Array<{ filePath: string; error: string }>
+) {
   try {
     const raw = readFileSync(fullPath, 'utf-8')
     const { meta, content } = parseDoc(raw)
@@ -154,7 +161,11 @@ function buildIndexEntry(fullPath: string, filePath: string, docsRoot: string, i
       created_at: meta.created || '',
       updated_at: meta.updated || ''
     }
-  } catch {
+  } catch (e: any) {
+    console.warn(`Failed to index ${filePath}:`, e.message)
+    if (failures) {
+      failures.push({ filePath, error: e.message || String(e) })
+    }
     return null
   }
 }

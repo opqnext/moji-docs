@@ -10,6 +10,7 @@
         class="title-input"
         v-model="title"
         placeholder="文档标题"
+        maxlength="100"
         @keydown.enter="saveDoc"
       />
       <div class="editor-header-actions">
