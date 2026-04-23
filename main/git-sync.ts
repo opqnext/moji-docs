@@ -135,11 +135,9 @@ export async function syncGit(db: Database.Database, docsRoot: string, silent = 
       incrementalReindex(db, docsRoot)
     }
 
-    const didSomething = hasLocalCommit || pulledNewContent || conflicts.length > 0 || needsPush
-    if (didSomething) {
-      syncQueue.markSynced()
-    }
+    syncQueue.markSynced()
 
+    const didSomething = hasLocalCommit || pulledNewContent || conflicts.length > 0 || needsPush
     if (!didSomething) {
       return { success: true, message: '无需同步，本地和远程均无变更', conflicts: [] }
     }
