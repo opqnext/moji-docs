@@ -1,9 +1,10 @@
 import Database from 'better-sqlite3'
 import { join, dirname, relative, basename, extname } from 'path'
-import { readdirSync, readFileSync, statSync, existsSync } from 'fs'
+import { readdirSync, readFileSync, statSync, existsSync, writeFileSync } from 'fs'
 import { createHash } from 'crypto'
-import { parseDoc, filenameToTitle } from './front-matter'
+import { parseDoc, filenameToTitle, buildDefaultMeta, serializeDoc } from './front-matter'
 import { dropAndRebuildFts } from './database'
+import { markSelfWrite } from './file-watcher'
 
 export interface IndexStats {
   added: number
@@ -160,7 +161,6 @@ function buildIndexEntry(fullPath: string, filePath: string, docsRoot: string, i
 
 function indexDirectories(db: Database.Database, docsRoot: string): void {
   const dirs = new Set<string>()
-  const entries = readdirSync(docsRoot, { withFileTypes: true })
 
   collectDirs(docsRoot, docsRoot, dirs)
 
@@ -173,12 +173,32 @@ function indexDirectories(db: Database.Database, docsRoot: string): void {
   `)
 
   for (const dirPath of dirs) {
-    const hasIndex = db.prepare('SELECT 1 FROM doc_index WHERE file_path = ?').get(dirPath + '/_index.md')
+    const indexFilePath = dirPath + '/_index.md'
+    const hasIndex = db.prepare('SELECT 1 FROM doc_index WHERE file_path = ?').get(indexFilePath)
     if (hasIndex) continue
 
     const dirName = basename(dirPath)
     const parentDir = dirname(dirPath)
     const parentPath = parentDir === '.' ? '' : parentDir
+
+    const indexFullPath = join(docsRoot, indexFilePath)
+    if (!existsSync(indexFullPath)) {
+      try {
+        const dirFullPath = join(docsRoot, dirPath)
+        const dirStat = statSync(dirFullPath)
+        const pad = (n: number) => String(n).padStart(2, '0')
+        const birthTime = dirStat.birthtime.getTime() > 0 ? dirStat.birthtime : dirStat.mtime
+        const created = `${birthTime.getFullYear()}-${pad(birthTime.getMonth() + 1)}-${pad(birthTime.getDate())} ${pad(birthTime.getHours())}:${pad(birthTime.getMinutes())}:${pad(birthTime.getSeconds())}`
+        const meta = buildDefaultMeta(dirName)
+        meta.created = created
+        meta.updated = created
+        const raw = serializeDoc(meta, '')
+        markSelfWrite(indexFilePath)
+        writeFileSync(indexFullPath, raw, 'utf-8')
+      } catch (e: any) {
+        console.error(`Failed to create _index.md for ${dirPath}:`, e.message)
+      }
+    }
 
     const existsAsDir = db.prepare('SELECT 1 FROM doc_index WHERE file_path = ? AND is_directory = 1').get(dirPath)
     if (!existsAsDir) {

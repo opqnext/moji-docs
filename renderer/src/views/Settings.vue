@@ -54,6 +54,7 @@
             <div class="sys-info-row"><span>文件监听</span><span>chokidar</span></div>
             <div class="sys-info-row"><span>版本管理</span><span>simple-git</span></div>
             <div class="sys-info-row"><span>运行时</span><span>Electron {{ appInfo.electronVersion || '-' }}</span></div>
+            <div class="sys-info-row"><span>当前时区</span><span>Asia/Shanghai (UTC+8)</span></div>
           </div>
         </div>
 
@@ -180,7 +181,7 @@
           </div>
           <div class="form-group">
             <label>同步间隔 (分钟)</label>
-            <input v-model="settings.git_interval" type="number" min="0" placeholder="5, 0=关闭" />
+            <input v-model.number="settings.git_interval" type="number" min="0" step="1" placeholder="5, 0=关闭" />
           </div>
           <div style="display: flex; gap: 10px; flex-wrap: wrap;">
             <button class="btn btn-primary" @click="saveGit">保存</button>
@@ -445,7 +446,7 @@ async function saveGit() {
   await api.saveSettings({
     git_url: settings.value.git_url,
     git_branch: settings.value.git_branch,
-    git_interval: settings.value.git_interval
+    git_interval: String(Math.round(Number(settings.value.git_interval) || 5))
   })
   toast('保存成功')
   loadGitInfo()

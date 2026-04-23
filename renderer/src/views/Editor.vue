@@ -306,8 +306,27 @@ function handleKeydown(e: KeyboardEvent) {
         takeSnapshot()
         const nextNum = parseInt(numStr) + 1
         const insert = `\n${indent}${nextNum}. `
-        content.value = text.substring(0, pos) + insert + text.substring(pos)
-        nextTick(() => { ta.selectionStart = ta.selectionEnd = pos + insert.length; updatePreview(); markUnsaved(); scheduleAutoSave() })
+        let updated = text.substring(0, pos) + insert + text.substring(pos)
+        const cursorPos = pos + insert.length
+        let renumberFrom = updated.indexOf('\n', cursorPos)
+        renumberFrom = renumberFrom === -1 ? updated.length : renumberFrom + 1
+        let seqNum = nextNum + 1
+        while (renumberFrom < updated.length) {
+          const nlIdx = updated.indexOf('\n', renumberFrom)
+          const lineBegin = renumberFrom
+          const lineEnd = nlIdx === -1 ? updated.length : nlIdx
+          const line = updated.substring(lineBegin, lineEnd)
+          const m = line.match(new RegExp(`^(${indent.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})(\\d+)\\.\\s`))
+          if (!m) break
+          const oldPrefix = `${m[1]}${m[2]}. `
+          const newPrefix = `${indent}${seqNum}. `
+          updated = updated.substring(0, lineBegin) + newPrefix + line.substring(oldPrefix.length) + updated.substring(lineEnd)
+          seqNum++
+          const newLineEnd = lineBegin + newPrefix.length + (line.length - oldPrefix.length)
+          renumberFrom = newLineEnd + 1
+        }
+        content.value = updated
+        nextTick(() => { ta.selectionStart = ta.selectionEnd = cursorPos; updatePreview(); markUnsaved(); scheduleAutoSave() })
       }
       return
     }

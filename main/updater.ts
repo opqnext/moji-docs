@@ -1,4 +1,4 @@
-import { app, BrowserWindow, shell, dialog, ipcMain, net } from 'electron'
+import { app, BrowserWindow, ipcMain, net } from 'electron'
 
 export const UPDATE_REPO = 'opqnext/moji-docs'
 
@@ -151,50 +151,14 @@ export async function checkForUpdate(updateSource: string): Promise<CheckUpdateR
 }
 
 export function showUpdateDialog(parentWindow: BrowserWindow | null, result: CheckUpdateResult): void {
-  if (result.error) {
-    dialog.showMessageBox({
-      type: 'info',
-      title: '检查更新',
-      message: `当前版本：${result.currentVersion}`,
-      detail: result.error.includes('未配置')
-        ? '请在 设置 → 检查更新 中配置 GitHub 仓库地址后再试。'
-        : `检查失败：${result.error}`,
-      buttons: ['确定']
-    })
-    return
-  }
-
-  if (!result.hasUpdate) {
-    dialog.showMessageBox({
-      type: 'info',
-      title: '检查更新',
-      message: '当前已是最新版本',
-      detail: `版本号：${result.currentVersion}`,
-      buttons: ['确定']
-    })
-    return
-  }
-
-  const detail = [
-    `最新版本：${result.latestVersion}`,
-    result.releaseDate ? `发布日期：${result.releaseDate}` : '',
-    result.releaseNotes ? `\n更新说明：\n${result.releaseNotes}` : ''
-  ].filter(Boolean).join('\n')
-
-  const downloadTarget = result.downloadUrl || result.htmlUrl
-  const buttons = downloadTarget ? ['前往下载', '稍后再说'] : ['确定']
-
-  dialog.showMessageBox({
-    type: 'info',
-    title: '发现新版本',
-    message: `发现新版本 ${result.latestVersion}（当前 ${result.currentVersion}）`,
-    detail,
-    buttons
-  }).then(({ response }) => {
-    if (response === 0 && downloadTarget) {
-      shell.openExternal(downloadTarget)
+  if (parentWindow) {
+    parentWindow.webContents.send('show-update', result)
+  } else {
+    const win = BrowserWindow.getAllWindows()[0]
+    if (win) {
+      win.webContents.send('show-update', result)
     }
-  })
+  }
 }
 
 export function registerUpdaterIpc(): void {

@@ -10,9 +10,9 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import api from '../api'
 
 const hidden = ref(true)
-const status = ref<{ state: string; pendingCommits: number; lastSyncTime: string; errorMessage: string }>({
+const status = ref<{ state: string; pendingDocs: number; lastSyncTime: string; errorMessage: string }>({
   state: 'synced',
-  pendingCommits: 0,
+  pendingDocs: 0,
   lastSyncTime: '',
   errorMessage: ''
 })
@@ -21,7 +21,7 @@ const label = computed(() => {
   switch (status.value.state) {
     case 'synced': return '已同步'
     case 'syncing': return '同步中...'
-    case 'pending': return `待同步 (${status.value.pendingCommits})`
+    case 'pending': return `待同步 (${status.value.pendingDocs})`
     case 'error': return '同步失败'
     default: return ''
   }

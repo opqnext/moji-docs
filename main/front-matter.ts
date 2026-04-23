@@ -54,7 +54,9 @@ export function serializeDoc(meta: Partial<DocMeta>, content: string, preserveFi
 }
 
 export function nowString(): string {
-  return new Date().toISOString().replace('T', ' ').substring(0, 19)
+  const d = new Date()
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
 }
 
 export function titleToFilename(title: string): string {
@@ -82,7 +84,9 @@ function normalizeTags(raw: unknown): string[] {
 function normalizeDateTime(raw: unknown): string {
   if (!raw) return ''
   if (raw instanceof Date) {
-    return raw.toISOString().replace('T', ' ').substring(0, 19)
+    const d = raw
+    const pad = (n: number) => String(n).padStart(2, '0')
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
   }
   return String(raw)
 }

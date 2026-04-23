@@ -28,6 +28,11 @@ export function registerSettingsIpc(db: Database.Database, docsRoot: string): vo
   })
 
   ipcMain.handle('settings:save', (_e, items: Record<string, string>) => {
+    const normalized = { ...items }
+    if ('git_interval' in normalized) {
+      normalized['git_interval'] = String(Math.round(Number(normalized['git_interval']) || 5))
+    }
+
     const upsert = db.prepare(
       'INSERT INTO app_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value'
     )
@@ -36,9 +41,10 @@ export function registerSettingsIpc(db: Database.Database, docsRoot: string): vo
         upsert.run(k, v)
       }
     })
-    tx(Object.entries(items))
+    tx(Object.entries(normalized))
 
-    if ('git_interval' in items || 'git_url' in items) {
+    if ('git_interval' in normalized || 'git_url' in normalized) {
+      syncQueue.resetFailures()
       startGitSyncScheduler(db, docsRoot)
     }
 
