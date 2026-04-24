@@ -139,11 +139,17 @@ export function registerDocIpc(db: Database.Database, docsRoot: string): void {
             markSelfWrite(finalPath)
             writeFileSync(fullPath, newRaw, 'utf-8')
 
+            const oldDirFull = dirname(fullPath)
             mkdirSync(dirname(newDirFull), { recursive: true })
-            renameSync(dirname(fullPath), newDirFull)
+            renameSync(oldDirFull, newDirFull)
 
-            incrementalReindex(db, docsRoot)
-            syncQueue.markPending(`${newDirPath}/_index.md`)
+            try {
+              incrementalReindex(db, docsRoot)
+              syncQueue.markPending(`${newDirPath}/_index.md`)
+            } catch (reindexErr) {
+              try { mkdirSync(dirname(oldDirFull), { recursive: true }); renameSync(newDirFull, oldDirFull) } catch {}
+              throw new Error(`目录重命名失败，已回滚: ${(reindexErr as Error).message}`)
+            }
             return `${newDirPath}/_index.md`
           }
         } else {
@@ -277,14 +283,22 @@ export function registerDocIpc(db: Database.Database, docsRoot: string): void {
       const newDirFull = join(docsRoot, newDirRel)
 
       if (srcDirRel === newDirRel) return filePath
+      if (targetDir === srcDirRel || targetDir.startsWith(srcDirRel + '/')) {
+        throw new Error('不能将目录移动到其自身或子目录中')
+      }
       if (existsSync(newDirFull)) throw new Error(`目标位置已存在同名目录 "${dirName}"`)
 
       mkdirSync(dirname(newDirFull), { recursive: true })
       renameSync(srcDirFull, newDirFull)
-      cleanEmptyParents(dirname(srcDirFull), docsRoot)
 
-      incrementalReindex(db, docsRoot)
-      syncQueue.markPending(`${newDirRel}/_index.md`)
+      try {
+        cleanEmptyParents(dirname(srcDirFull), docsRoot)
+        incrementalReindex(db, docsRoot)
+        syncQueue.markPending(`${newDirRel}/_index.md`)
+      } catch (reindexErr) {
+        try { mkdirSync(dirname(srcDirFull), { recursive: true }); renameSync(newDirFull, srcDirFull) } catch {}
+        throw new Error(`移动失败，已回滚: ${(reindexErr as Error).message}`)
+      }
       return `${newDirRel}/_index.md`
     } else {
       const fileName = basename(filePath)
@@ -296,12 +310,17 @@ export function registerDocIpc(db: Database.Database, docsRoot: string): void {
 
       mkdirSync(dirname(newFullPath), { recursive: true })
       renameSync(fullPath, newFullPath)
-      cleanEmptyParents(dirname(fullPath), docsRoot)
 
-      markSelfWrite(newFilePath)
-      removeFromIndex(db, filePath)
-      reindexSingleFile(db, docsRoot, newFilePath)
-      syncQueue.markPending(newFilePath)
+      try {
+        cleanEmptyParents(dirname(fullPath), docsRoot)
+        markSelfWrite(newFilePath)
+        removeFromIndex(db, filePath)
+        reindexSingleFile(db, docsRoot, newFilePath)
+        syncQueue.markPending(newFilePath)
+      } catch (reindexErr) {
+        try { mkdirSync(dirname(fullPath), { recursive: true }); renameSync(newFullPath, fullPath) } catch {}
+        throw new Error(`移动失败，已回滚: ${(reindexErr as Error).message}`)
+      }
       return newFilePath
     }
   })
@@ -462,7 +481,7 @@ function findUniquePath(fullPath: string): { fullPath: string; renamed: boolean 
     const candidate = join(dir, `${base}_${i}${ext}`)
     if (!existsSync(candidate)) return { fullPath: candidate, renamed: true }
   }
-  return { fullPath, renamed: false }
+  throw new Error(`无法为文件生成唯一名称: ${basename(fullPath)}`)
 }
 
 function cleanEmptyParents(dir: string, stopAt: string): void {

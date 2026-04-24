@@ -218,7 +218,7 @@ a:hover { opacity: 0.8; }
   align-items: center;
   gap: 4px;
   padding: 4px 12px;
-  background: #f5f3ff;
+  background: color-mix(in srgb, var(--tc) 8%, transparent);
   border-radius: 6px;
   font-size: calc(var(--fs, 14px) - 1px);
   cursor: pointer;

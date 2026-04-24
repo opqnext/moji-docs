@@ -192,21 +192,27 @@ function getFilePath(): string {
   return decodeURIComponent(raw)
 }
 
+let loadVersion = 0
+
 async function loadDetail() {
   const filePath = getFilePath()
   if (!filePath) { router.push('/'); return }
+  const currentVersion = ++loadVersion
   renderedHtml.value = ''
   try {
-    detail.value = await api.getDetail(filePath)
-    if (!detail.value) {
+    const result = await api.getDetail(filePath)
+    if (currentVersion !== loadVersion) return
+    if (!result) {
       console.warn('Document not found:', filePath)
       router.push('/')
       return
     }
-    if (detail.value.doc.content) {
-      renderedHtml.value = renderMarkdown(detail.value.doc.content)
+    detail.value = result
+    if (result.doc.content) {
+      renderedHtml.value = renderMarkdown(result.doc.content)
     }
   } catch (e) {
+    if (currentVersion !== loadVersion) return
     console.error('Failed to load detail:', filePath, e)
     router.push('/')
   }
@@ -222,7 +228,11 @@ function doSearch() {
   if (searchTimer) clearTimeout(searchTimer)
   searchTimer = setTimeout(async () => {
     if (!searchKey.value.trim()) { searchResults.value = []; return }
-    searchResults.value = await api.search(searchKey.value.trim())
+    try {
+      searchResults.value = await api.search(searchKey.value.trim())
+    } catch {
+      searchResults.value = []
+    }
   }, 300)
 }
 
@@ -233,17 +243,31 @@ async function doDelete() {
     : `确定删除「${doc.title}」？`
   const ok = await confirm(msg)
   if (!ok) return
-  await api.deleteDoc(doc.file_path)
-  toast('已删除', 'success')
-  router.push('/')
+  const breadcrumb = detail.value.breadcrumb
+  try {
+    await api.deleteDoc(doc.file_path)
+    toast('已删除', 'success')
+    if (breadcrumb && breadcrumb.length > 0) {
+      const parent = breadcrumb[breadcrumb.length - 1]
+      router.push('/doc/' + encodeURIComponent(parent.file_path))
+    } else {
+      router.push('/')
+    }
+  } catch (e: any) {
+    toast(e.message || '删除失败', 'error')
+  }
 }
 
 async function togglePin() {
   const doc = detail.value.doc
   const newVal = !doc.is_pinned
-  await api.pinDoc(doc.file_path, newVal)
-  doc.is_pinned = newVal
-  toast(newVal ? '已置顶' : '已取消置顶')
+  try {
+    await api.pinDoc(doc.file_path, newVal)
+    doc.is_pinned = newVal
+    toast(newVal ? '已置顶' : '已取消置顶')
+  } catch (e: any) {
+    toast(e.message || '操作失败', 'error')
+  }
 }
 
 async function openMoveModal() {
@@ -253,16 +277,20 @@ async function openMoveModal() {
     const newPath = await api.moveDoc(detail.value.doc.file_path, targetPath)
     toast('移动成功')
     if (newPath) {
-      router.replace('/doc/' + encodeURIComponent(newPath))
+      await router.replace('/doc/' + encodeURIComponent(newPath))
     }
-    loadDetail()
   } catch (e: any) {
     toast(e.message || '移动失败', 'error')
   }
 }
 
 async function loadVersions() {
-  versions.value = await api.getVersions(detail.value.doc.file_path)
+  try {
+    versions.value = await api.getVersions(detail.value.doc.file_path)
+  } catch (e: any) {
+    toast(e.message || '加载版本失败', 'error')
+    versions.value = []
+  }
 }
 
 async function previewVersion(commitHash: string) {
@@ -276,10 +304,19 @@ async function previewVersion(commitHash: string) {
 async function rollbackVersion(commitHash: string) {
   const ok = await confirm('确定回滚到此版本？')
   if (!ok) return
-  await api.rollbackVersion(detail.value.doc.file_path, commitHash)
-  toast('回滚成功')
-  showVersions.value = false
-  loadDetail()
+  try {
+    await api.rollbackVersion(detail.value.doc.file_path, commitHash)
+    toast('回滚成功')
+    showVersions.value = false
+    loadDetail()
+  } catch (e: any) {
+    toast(e.message || '回滚失败', 'error')
+  }
+}
+
+function escapeHtml(str: string): string {
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;')
 }
 
 async function doExportPdf() {
@@ -293,12 +330,16 @@ async function doExportPdf() {
       table { border-collapse: collapse; width: 100%; }
       th, td { border: 1px solid #ddd; padding: 8px; }
     </style></head><body>
-      <h1>${doc.title}</h1>
+      <h1>${escapeHtml(doc.title)}</h1>
       ${doc.content_html || renderedHtml.value}
     </body></html>
   `
-  const result = await api.exportPdf(html, doc.title)
-  if (result) toast('PDF 已保存')
+  try {
+    const result = await api.exportPdf(html, doc.title)
+    if (result) toast('PDF 已保存')
+  } catch (e: any) {
+    toast(e.message || '导出失败', 'error')
+  }
 }
 
 function doPrint() { window.print() }

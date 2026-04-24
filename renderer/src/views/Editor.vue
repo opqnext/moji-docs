@@ -261,6 +261,65 @@ async function handlePaste(e: ClipboardEvent) {
   }
 }
 
+function renumberOrderedListAround(ta: HTMLTextAreaElement) {
+  const text = content.value
+  const pos = ta.selectionStart
+
+  const lineStart = text.lastIndexOf('\n', pos - 1) + 1
+  const lineEndIdx = text.indexOf('\n', pos)
+  const lineEnd = lineEndIdx === -1 ? text.length : lineEndIdx
+  const currentLine = text.substring(lineStart, lineEnd)
+  const match = currentLine.match(/^(\s*)\d+\.\s/)
+  if (!match) return
+
+  const indent = match[1]
+  const indentPattern = new RegExp(`^(${indent.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})(\\d+)\\.\\s`)
+
+  let blockStart = lineStart
+  while (blockStart > 0) {
+    const prevLineStart = text.lastIndexOf('\n', blockStart - 2) + 1
+    const prevLine = text.substring(prevLineStart, blockStart - 1)
+    if (!indentPattern.test(prevLine)) break
+    blockStart = prevLineStart
+  }
+
+  let updated = text
+  let seqNum = 1
+  let scanPos = blockStart
+  let changed = false
+
+  while (scanPos < updated.length) {
+    const nlIdx = updated.indexOf('\n', scanPos)
+    const scanLineEnd = nlIdx === -1 ? updated.length : nlIdx
+    const line = updated.substring(scanPos, scanLineEnd)
+    const m = line.match(indentPattern)
+    if (!m) break
+
+    const expectedPrefix = `${indent}${seqNum}. `
+    const oldPrefix = `${m[1]}${m[2]}. `
+    if (oldPrefix !== expectedPrefix) {
+      updated = updated.substring(0, scanPos) + expectedPrefix + line.substring(oldPrefix.length) + updated.substring(scanLineEnd)
+      changed = true
+      const newScanLineEnd = scanPos + expectedPrefix.length + (line.length - oldPrefix.length)
+      scanPos = newScanLineEnd + 1
+    } else {
+      scanPos = scanLineEnd + 1
+    }
+    seqNum++
+  }
+
+  if (changed) {
+    takeSnapshot()
+    content.value = updated
+    nextTick(() => {
+      ta.selectionStart = ta.selectionEnd = pos
+      updatePreview()
+      markUnsaved()
+      scheduleAutoSave()
+    })
+  }
+}
+
 function handleKeydown(e: KeyboardEvent) {
   if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
     e.preventDefault()
@@ -285,6 +344,28 @@ function handleKeydown(e: KeyboardEvent) {
 
   const ta = textareaRef.value
   if (!ta) return
+
+  if (e.key === 'Backspace' || e.key === 'Delete') {
+    const pos = ta.selectionStart
+    const selEnd = ta.selectionEnd
+    const text = content.value
+    const lineStart = text.lastIndexOf('\n', pos - 1) + 1
+    const lineEndIdx = text.indexOf('\n', pos)
+    const lineEnd = lineEndIdx === -1 ? text.length : lineEndIdx
+    const currentLine = text.substring(lineStart, lineEnd)
+    const isOnOrderedListLine = /^(\s*)\d+\.\s/.test(currentLine)
+
+    if (isOnOrderedListLine) {
+      const willMergeLine = (e.key === 'Backspace' && pos === lineStart && pos > 0 && pos === selEnd) ||
+        (e.key === 'Delete' && pos === lineEnd && lineEnd < text.length && pos === selEnd)
+
+      if (willMergeLine) {
+        setTimeout(() => {
+          renumberOrderedListAround(ta)
+        }, 0)
+      }
+    }
+  }
 
   if (e.key === 'Enter') {
     const pos = ta.selectionStart
@@ -418,10 +499,10 @@ async function saveDoc(silent = false) {
 
 async function goBackWithSave() {
   if (isNavigating) return
-  isNavigating = true
   if (title.value.trim() && (content.value !== lastSavedContent || title.value !== lastSavedTitle)) {
     await saveDoc(true)
   }
+  isNavigating = true
   if (filePath.value) {
     router.push('/doc/' + encodeURIComponent(filePath.value))
   } else {
@@ -429,9 +510,10 @@ async function goBackWithSave() {
   }
 }
 
-function handleBeforeUnload() {
+function handleBeforeUnload(e: BeforeUnloadEvent) {
   if (title.value.trim() && (content.value !== lastSavedContent || title.value !== lastSavedTitle)) {
-    saveDoc(true)
+    e.preventDefault()
+    e.returnValue = ''
   }
 }
 
@@ -465,7 +547,9 @@ onBeforeUnmount(() => {
   if (autoSaveTimer) clearTimeout(autoSaveTimer)
   if (snapshotTimer) clearTimeout(snapshotTimer)
   window.removeEventListener('beforeunload', handleBeforeUnload)
-  handleBeforeUnload()
+  if (title.value.trim() && (content.value !== lastSavedContent || title.value !== lastSavedTitle)) {
+    saveDoc(true)
+  }
 })
 </script>
 

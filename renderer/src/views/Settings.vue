@@ -446,7 +446,11 @@ async function saveGit() {
   await api.saveSettings({
     git_url: settings.value.git_url,
     git_branch: settings.value.git_branch,
-    git_interval: String(Math.round(Number(settings.value.git_interval) || 5))
+    git_interval: String(
+      settings.value.git_interval === '' || settings.value.git_interval === undefined
+        ? 5
+        : Math.max(0, Math.round(Number(settings.value.git_interval)))
+    )
   })
   toast('保存成功')
   loadGitInfo()

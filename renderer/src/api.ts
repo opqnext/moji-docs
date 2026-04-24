@@ -19,7 +19,6 @@ const api = {
   getDetail: (filePath: string) => window.mojiApi.invoke('doc:getDetail', filePath),
   saveDoc: (params: any) => window.mojiApi.invoke('doc:save', params),
   deleteDoc: (filePath: string) => window.mojiApi.invoke('doc:delete', filePath),
-  deleteVersion: (versionId: string) => window.mojiApi.invoke('version:delete', versionId),
   moveDoc: (filePath: string, targetParentPath: string) => window.mojiApi.invoke('doc:move', filePath, targetParentPath),
   pinDoc: (filePath: string, isPinned: boolean) => window.mojiApi.invoke('doc:pin', filePath, isPinned),
   getPinned: () => window.mojiApi.invoke('doc:getPinned'),

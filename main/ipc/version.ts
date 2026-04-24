@@ -10,7 +10,7 @@ export function registerVersionIpc(docsRoot: string): void {
 
     try {
       const git = simpleGit(docsRoot)
-      const log = await git.log({ file: filePath, maxCount: 20 })
+      const log = await git.log({ file: filePath, maxCount: 10 })
 
       return log.all.map(entry => ({
         hash: entry.hash,

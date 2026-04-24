@@ -235,14 +235,14 @@ async function loadTree() {
 }
 
 onMounted(async () => {
-  const [r, p, n] = await Promise.all([
+  const [r, p, n] = await Promise.allSettled([
     api.getRecent(),
     api.getPinned(),
     api.getNavigation()
   ])
-  recent.value = r
-  pinned.value = p
-  navigation.value = n
+  if (r.status === 'fulfilled') recent.value = r.value
+  if (p.status === 'fulfilled') pinned.value = p.value
+  if (n.status === 'fulfilled') navigation.value = n.value
 })
 </script>
 
