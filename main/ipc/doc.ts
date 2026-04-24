@@ -6,16 +6,18 @@ import os from 'os'
 import { parseDoc, serializeDoc, nowString, titleToFilename, buildDefaultMeta } from '../front-matter'
 import { reindexSingleFile, removeFromIndex, incrementalReindex, fullRebuild } from '../indexer'
 import { markSelfWrite } from '../file-watcher'
-import { commitChanges } from '../git-sync'
 import * as syncQueue from '../sync-queue'
+
 
 export function registerDocIpc(db: Database.Database, docsRoot: string): void {
   const username = os.userInfo().username
 
   ipcMain.handle('doc:getRecent', () => {
     const now = new Date()
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString().replace('T', ' ').substring(0, 19)
-    const weekStart = new Date(now.getTime() - 7 * 86400000).toISOString().replace('T', ' ').substring(0, 19)
+    const pad = (n: number) => String(n).padStart(2, '0')
+    const todayStart = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} 00:00:00`
+    const weekAgo = new Date(now.getTime() - 7 * 86400000)
+    const weekStart = `${weekAgo.getFullYear()}-${pad(weekAgo.getMonth() + 1)}-${pad(weekAgo.getDate())} 00:00:00`
 
     const today = db.prepare(
       'SELECT rowid, file_path, title, tags, is_directory, updated_at FROM doc_index WHERE updated_at >= ? ORDER BY updated_at DESC LIMIT 5'
@@ -33,7 +35,10 @@ export function registerDocIpc(db: Database.Database, docsRoot: string): void {
   })
 
   ipcMain.handle('doc:getChildren', (_e, parentPath: string) => {
-    const normalizedPath = parentPath || ''
+    let normalizedPath = parentPath || ''
+    if (normalizedPath.endsWith('/_index.md')) {
+      normalizedPath = dirname(normalizedPath)
+    }
     return db.prepare(
       'SELECT rowid, file_path, title, tags, is_directory, sort, updated_at FROM doc_index WHERE parent_path = ? ORDER BY is_directory DESC, sort DESC, updated_at DESC'
     ).all(normalizedPath)
@@ -118,30 +123,64 @@ export function registerDocIpc(db: Database.Database, docsRoot: string): void {
       const newRaw = serializeDoc(updatedMeta, content, rawFrontMatter)
 
       let finalPath = params.file_path
-      if (params.title && params.title !== meta.title && !params.file_path.endsWith('/_index.md')) {
-        const dir = dirname(params.file_path)
-        const newFileName = titleToFilename(params.title) + '.md'
-        finalPath = dir ? `${dir}/${newFileName}` : newFileName
+      if (params.title && params.title !== meta.title) {
+        if (params.file_path.endsWith('/_index.md')) {
+          const oldDirPath = dirname(params.file_path)
+          const parentDir = dirname(oldDirPath)
+          const newDirName = titleToFilename(params.title)
+          const newDirPath = parentDir === '.' ? newDirName : `${parentDir}/${newDirName}`
 
-        if (finalPath !== params.file_path) {
-          const newFullPath = join(docsRoot, finalPath)
-          markSelfWrite(finalPath)
-          writeFileSync(newFullPath, newRaw, 'utf-8')
+          if (newDirPath !== oldDirPath) {
+            const newDirFull = join(docsRoot, newDirPath)
+            if (existsSync(newDirFull)) {
+              throw new Error(`同名目录「${params.title}」已存在`)
+            }
 
-          markSelfWrite(params.file_path)
-          unlinkSync(fullPath)
+            markSelfWrite(finalPath)
+            writeFileSync(fullPath, newRaw, 'utf-8')
 
-          removeFromIndex(db, params.file_path)
-          reindexSingleFile(db, docsRoot, finalPath)
-          scheduleGitCommit(docsRoot)
-          return finalPath
+            const oldDirFull = dirname(fullPath)
+            mkdirSync(dirname(newDirFull), { recursive: true })
+            renameSync(oldDirFull, newDirFull)
+
+            try {
+              incrementalReindex(db, docsRoot)
+              syncQueue.markPending(`${newDirPath}/_index.md`)
+            } catch (reindexErr) {
+              try { mkdirSync(dirname(oldDirFull), { recursive: true }); renameSync(newDirFull, oldDirFull) } catch {}
+              throw new Error(`目录重命名失败，已回滚: ${(reindexErr as Error).message}`)
+            }
+            return `${newDirPath}/_index.md`
+          }
+        } else {
+          const dir = dirname(params.file_path)
+          const newFileName = titleToFilename(params.title) + '.md'
+          finalPath = dir ? `${dir}/${newFileName}` : newFileName
+
+          if (finalPath !== params.file_path) {
+            const newFullPath = join(docsRoot, finalPath)
+            if (existsSync(newFullPath)) {
+              throw new Error(`同名文档「${params.title}」已存在`)
+            }
+
+            markSelfWrite(finalPath)
+            writeFileSync(newFullPath, newRaw, 'utf-8')
+
+            markSelfWrite(params.file_path)
+            unlinkSync(fullPath)
+
+            removeFromIndex(db, params.file_path)
+            reindexSingleFile(db, docsRoot, finalPath)
+            syncQueue.markPending(finalPath)
+            return finalPath
+          }
         }
       }
 
       markSelfWrite(finalPath)
       writeFileSync(fullPath, newRaw, 'utf-8')
       reindexSingleFile(db, docsRoot, finalPath)
-      scheduleGitCommit(docsRoot)
+      syncQueue.markPending(finalPath)
       return finalPath
     }
 
@@ -154,6 +193,11 @@ export function registerDocIpc(db: Database.Database, docsRoot: string): void {
       const dirName = titleToFilename(title)
       const dirPath = parentPath ? `${parentPath}/${dirName}` : dirName
       const fullDirPath = join(docsRoot, dirPath)
+
+      if (existsSync(fullDirPath)) {
+        throw new Error(`同名目录「${title}」已存在`)
+      }
+
       mkdirSync(fullDirPath, { recursive: true })
 
       filePath = `${dirPath}/_index.md`
@@ -167,6 +211,10 @@ export function registerDocIpc(db: Database.Database, docsRoot: string): void {
       const fileName = titleToFilename(title) + '.md'
       filePath = parentPath ? `${parentPath}/${fileName}` : fileName
       const fullPath = join(docsRoot, filePath)
+
+      if (existsSync(fullPath)) {
+        throw new Error(`同名文档「${title}」已存在`)
+      }
 
       mkdirSync(dirname(fullPath), { recursive: true })
 
@@ -182,7 +230,7 @@ export function registerDocIpc(db: Database.Database, docsRoot: string): void {
     }
 
     reindexSingleFile(db, docsRoot, filePath)
-    scheduleGitCommit(docsRoot)
+    syncQueue.markPending(filePath)
     return filePath
   })
 
@@ -210,7 +258,7 @@ export function registerDocIpc(db: Database.Database, docsRoot: string): void {
       cleanEmptyParents(dirname(fullPath), docsRoot)
     }
 
-    scheduleGitCommit(docsRoot)
+    syncQueue.markPending(filePath)
     return true
   })
 
@@ -235,14 +283,22 @@ export function registerDocIpc(db: Database.Database, docsRoot: string): void {
       const newDirFull = join(docsRoot, newDirRel)
 
       if (srcDirRel === newDirRel) return filePath
+      if (targetDir === srcDirRel || targetDir.startsWith(srcDirRel + '/')) {
+        throw new Error('不能将目录移动到其自身或子目录中')
+      }
       if (existsSync(newDirFull)) throw new Error(`目标位置已存在同名目录 "${dirName}"`)
 
       mkdirSync(dirname(newDirFull), { recursive: true })
       renameSync(srcDirFull, newDirFull)
-      cleanEmptyParents(dirname(srcDirFull), docsRoot)
 
-      incrementalReindex(db, docsRoot)
-      scheduleGitCommit(docsRoot)
+      try {
+        cleanEmptyParents(dirname(srcDirFull), docsRoot)
+        incrementalReindex(db, docsRoot)
+        syncQueue.markPending(`${newDirRel}/_index.md`)
+      } catch (reindexErr) {
+        try { mkdirSync(dirname(srcDirFull), { recursive: true }); renameSync(newDirFull, srcDirFull) } catch {}
+        throw new Error(`移动失败，已回滚: ${(reindexErr as Error).message}`)
+      }
       return `${newDirRel}/_index.md`
     } else {
       const fileName = basename(filePath)
@@ -254,12 +310,17 @@ export function registerDocIpc(db: Database.Database, docsRoot: string): void {
 
       mkdirSync(dirname(newFullPath), { recursive: true })
       renameSync(fullPath, newFullPath)
-      cleanEmptyParents(dirname(fullPath), docsRoot)
 
-      markSelfWrite(newFilePath)
-      removeFromIndex(db, filePath)
-      reindexSingleFile(db, docsRoot, newFilePath)
-      scheduleGitCommit(docsRoot)
+      try {
+        cleanEmptyParents(dirname(fullPath), docsRoot)
+        markSelfWrite(newFilePath)
+        removeFromIndex(db, filePath)
+        reindexSingleFile(db, docsRoot, newFilePath)
+        syncQueue.markPending(newFilePath)
+      } catch (reindexErr) {
+        try { mkdirSync(dirname(fullPath), { recursive: true }); renameSync(newFullPath, fullPath) } catch {}
+        throw new Error(`移动失败，已回滚: ${(reindexErr as Error).message}`)
+      }
       return newFilePath
     }
   })
@@ -276,6 +337,7 @@ export function registerDocIpc(db: Database.Database, docsRoot: string): void {
     markSelfWrite(filePath)
     writeFileSync(fullPath, newRaw, 'utf-8')
     reindexSingleFile(db, docsRoot, filePath)
+    syncQueue.markPending(filePath)
     return true
   })
 
@@ -293,7 +355,9 @@ export function registerDocIpc(db: Database.Database, docsRoot: string): void {
 
   ipcMain.handle('doc:search', (_e, keyword: string) => {
     if (!keyword || keyword.trim().length === 0) return []
+    const sanitizedFts = keyword.replace(/[":*^~(){}[\]\\]/g, '').trim()
     try {
+      if (!sanitizedFts) throw new Error('empty after sanitize')
       return db.prepare(`
         SELECT
           d.rowid,
@@ -310,11 +374,12 @@ export function registerDocIpc(db: Database.Database, docsRoot: string): void {
         WHERE doc_fts MATCH ?
         ORDER BY rank
         LIMIT 30
-      `).all(keyword + '*')
+      `).all(sanitizedFts + '*')
     } catch {
+      const escapedLike = keyword.replace(/[%_\\]/g, '\\$&')
       return db.prepare(
-        "SELECT rowid, file_path, title, is_directory, updated_at, parent_path FROM doc_index WHERE title LIKE ? OR content LIKE ? LIMIT 30"
-      ).all(`%${keyword}%`, `%${keyword}%`)
+        "SELECT rowid, file_path, title, is_directory, updated_at, parent_path FROM doc_index WHERE title LIKE ? ESCAPE '\\' OR content LIKE ? ESCAPE '\\' LIMIT 30"
+      ).all(`%${escapedLike}%`, `%${escapedLike}%`)
     }
   })
 
@@ -327,12 +392,22 @@ export function registerDocIpc(db: Database.Database, docsRoot: string): void {
   })
 
   ipcMain.handle('doc:importMd', (_e, files: Array<{ name: string; content: string }>, parentPath: string) => {
-    const results: string[] = []
+    const results: Array<{ path: string; renamed: boolean; originalName: string }> = []
     for (const file of files) {
-      const title = file.name.replace(/\.md$/i, '')
+      let title = file.name.replace(/\.md$/i, '')
+      if (Array.from(title).length > 100) {
+        title = Array.from(title).slice(0, 100).join('')
+      }
       const fileName = titleToFilename(title) + '.md'
-      const filePath = parentPath ? `${parentPath}/${fileName}` : fileName
-      const fullPath = join(docsRoot, filePath)
+      let filePath = parentPath ? `${parentPath}/${fileName}` : fileName
+      const originalName = fileName
+
+      const uniqueResult = findUniquePath(join(docsRoot, filePath))
+      const fullPath = uniqueResult.fullPath
+      const renamed = uniqueResult.renamed
+      if (renamed) {
+        filePath = relative(docsRoot, fullPath).replace(/\\/g, '/')
+      }
 
       mkdirSync(dirname(fullPath), { recursive: true })
 
@@ -342,9 +417,8 @@ export function registerDocIpc(db: Database.Database, docsRoot: string): void {
       markSelfWrite(filePath)
       writeFileSync(fullPath, raw, 'utf-8')
       reindexSingleFile(db, docsRoot, filePath)
-      results.push(filePath)
+      results.push({ path: filePath, renamed, originalName })
     }
-    scheduleGitCommit(docsRoot)
     return results
   })
 
@@ -353,8 +427,10 @@ export function registerDocIpc(db: Database.Database, docsRoot: string): void {
     const totalDirs = (db.prepare("SELECT COUNT(*) as c FROM doc_index WHERE is_directory = 1").get() as any).c
 
     const now = new Date()
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString().replace('T', ' ').substring(0, 19)
-    const weekStart = new Date(now.getTime() - 7 * 86400000).toISOString().replace('T', ' ').substring(0, 19)
+    const pad = (n: number) => String(n).padStart(2, '0')
+    const todayStart = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} 00:00:00`
+    const weekAgo = new Date(now.getTime() - 7 * 86400000)
+    const weekStart = `${weekAgo.getFullYear()}-${pad(weekAgo.getMonth() + 1)}-${pad(weekAgo.getDate())} 00:00:00`
 
     const todayUpdates = (db.prepare("SELECT COUNT(*) as c FROM doc_index WHERE updated_at >= ?").get(todayStart) as any).c
     const weekUpdates = (db.prepare("SELECT COUNT(*) as c FROM doc_index WHERE updated_at >= ?").get(weekStart) as any).c
@@ -382,10 +458,6 @@ export function registerDocIpc(db: Database.Database, docsRoot: string): void {
   })
 }
 
-function scheduleGitCommit(docsRoot: string): void {
-  syncQueue.scheduleCommit(() => commitChanges(docsRoot))
-}
-
 function removeDirectoryRecursive(dirPath: string): void {
   if (!existsSync(dirPath)) return
   const entries = readdirSync(dirPath, { withFileTypes: true })
@@ -398,6 +470,18 @@ function removeDirectoryRecursive(dirPath: string): void {
     }
   }
   rmdirSync(dirPath)
+}
+
+function findUniquePath(fullPath: string): { fullPath: string; renamed: boolean } {
+  if (!existsSync(fullPath)) return { fullPath, renamed: false }
+  const dir = dirname(fullPath)
+  const ext = fullPath.endsWith('.md') ? '.md' : ''
+  const base = basename(fullPath, ext)
+  for (let i = 1; i < 1000; i++) {
+    const candidate = join(dir, `${base}_${i}${ext}`)
+    if (!existsSync(candidate)) return { fullPath: candidate, renamed: true }
+  }
+  throw new Error(`无法为文件生成唯一名称: ${basename(fullPath)}`)
 }
 
 function cleanEmptyParents(dir: string, stopAt: string): void {

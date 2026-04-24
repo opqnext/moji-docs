@@ -1,6 +1,7 @@
 import { marked, Renderer } from 'marked'
 import { markedHighlight } from 'marked-highlight'
 import hljs from 'highlight.js'
+import DOMPurify from 'dompurify'
 
 marked.use(markedHighlight({
   langPrefix: 'hljs language-',
@@ -76,7 +77,12 @@ function postprocessCustomAlerts(html: string): string {
 export function renderMarkdown(md: string): string {
   try {
     const html = marked.parse(preprocessImageSize(md)) as string
-    return postprocessCustomAlerts(html)
+    const alertProcessed = postprocessCustomAlerts(html)
+    return DOMPurify.sanitize(alertProcessed, {
+      ADD_TAGS: ['img', 'iframe'],
+      ADD_ATTR: ['width', 'height', 'alt', 'title', 'target', 'rel'],
+      ALLOWED_URI_REGEXP: /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|sms|cid|xmpp|moji-file):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i
+    })
   } catch {
     return md
   }

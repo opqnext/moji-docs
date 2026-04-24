@@ -54,12 +54,20 @@ export function serializeDoc(meta: Partial<DocMeta>, content: string, preserveFi
 }
 
 export function nowString(): string {
-  return new Date().toISOString().replace('T', ' ').substring(0, 19)
+  const d = new Date()
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
 }
+
+const MAX_FILENAME_CHARS = 100
 
 export function titleToFilename(title: string): string {
   if (!title.trim()) return 'untitled'
-  return title.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').trim()
+  let name = title.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').trim()
+  if (Array.from(name).length > MAX_FILENAME_CHARS) {
+    name = Array.from(name).slice(0, MAX_FILENAME_CHARS).join('')
+  }
+  return name
 }
 
 export function filenameToTitle(filename: string): string {
@@ -82,7 +90,9 @@ function normalizeTags(raw: unknown): string[] {
 function normalizeDateTime(raw: unknown): string {
   if (!raw) return ''
   if (raw instanceof Date) {
-    return raw.toISOString().replace('T', ' ').substring(0, 19)
+    const d = raw
+    const pad = (n: number) => String(n).padStart(2, '0')
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
   }
   return String(raw)
 }

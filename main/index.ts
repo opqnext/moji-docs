@@ -1,5 +1,5 @@
 import { app, BrowserWindow, ipcMain, shell, protocol, net, dialog, nativeImage } from 'electron'
-import { join } from 'path'
+import { join, resolve } from 'path'
 import { writeFileSync, readFileSync, existsSync, mkdirSync } from 'fs'
 import { pathToFileURL } from 'url'
 import os from 'os'
@@ -19,6 +19,8 @@ import Database from 'better-sqlite3'
 
 let mainWindow: BrowserWindow | null = null
 let appInitialized = false
+let currentDocsRoot: string | null = null
+let currentDb: Database.Database | null = null
 
 function getConfigPath(): string {
   return join(app.getPath('userData'), 'moji-config.json')
@@ -53,7 +55,7 @@ function createWindow(): void {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      webSecurity: false
+      webSecurity: !(process.env.NODE_ENV === 'development' || process.env['ELECTRON_RENDERER_URL'])
     }
   })
 
@@ -71,6 +73,12 @@ function createWindow(): void {
   mainWindow.webContents.setWindowOpenHandler((details) => {
     shell.openExternal(details.url)
     return { action: 'deny' }
+  })
+
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    if (url.startsWith('file://') || url.startsWith('data:')) return
+    event.preventDefault()
+    shell.openExternal(url)
   })
 
   if (process.env['ELECTRON_RENDERER_URL']) {
@@ -105,10 +113,15 @@ function initApp(docsRoot: string): Database.Database {
 app.whenReady().then(() => {
   protocol.handle('moji-file', (request) => {
     const filePath = decodeURIComponent(request.url.replace('moji-file://', ''))
-    return net.fetch(pathToFileURL(filePath).toString())
+    const resolved = resolve(filePath)
+    if (currentDocsRoot && !resolved.startsWith(currentDocsRoot + '/') && resolved !== currentDocsRoot) {
+      return new Response('Forbidden: path outside docsRoot', { status: 403 })
+    }
+    return net.fetch(pathToFileURL(resolved).toString())
   })
 
   const config = loadConfig()
+  currentDocsRoot = config?.docsRoot || null
   let db: Database.Database | null = null
 
   registerUpdaterIpc()
@@ -116,6 +129,7 @@ app.whenReady().then(() => {
 
   if (config?.docsRoot) {
     db = initApp(config.docsRoot)
+    currentDb = db
 
     const settings = db.prepare('SELECT value FROM app_settings WHERE key = ?').get('git_url') as any
     if (settings?.value) {
@@ -152,7 +166,9 @@ app.whenReady().then(() => {
     }
 
     saveConfig({ docsRoot })
+    currentDocsRoot = docsRoot
     db = initApp(docsRoot)
+    currentDb = db
 
     if (gitUrl) {
       const upsert = db.prepare(
@@ -198,22 +214,28 @@ app.whenReady().then(() => {
   ipcMain.handle('app:exportPdf', async (_event, html: string, title: string) => {
     if (!mainWindow) return null
     const pdfWindow = new BrowserWindow({ show: false, width: 800, height: 600 })
-    pdfWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`)
-    await new Promise(r => setTimeout(r, 500))
-    const pdfData = await pdfWindow.webContents.printToPDF({
-      printBackground: true,
-      margins: { marginType: 'default' }
-    })
-    pdfWindow.close()
-    const result = await dialog.showSaveDialog(mainWindow, {
-      defaultPath: `${title}.pdf`,
-      filters: [{ name: 'PDF', extensions: ['pdf'] }]
-    })
-    if (!result.canceled && result.filePath) {
-      writeFileSync(result.filePath, pdfData)
-      return result.filePath
+    try {
+      pdfWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`)
+      await new Promise(r => setTimeout(r, 500))
+      const pdfData = await pdfWindow.webContents.printToPDF({
+        printBackground: true,
+        margins: { marginType: 'default' }
+      })
+      pdfWindow.close()
+      const result = await dialog.showSaveDialog(mainWindow, {
+        defaultPath: `${title}.pdf`,
+        filters: [{ name: 'PDF', extensions: ['pdf'] }]
+      })
+      if (!result.canceled && result.filePath) {
+        writeFileSync(result.filePath, pdfData)
+        return result.filePath
+      }
+      return null
+    } catch (e) {
+      throw e
+    } finally {
+      if (!pdfWindow.isDestroyed()) pdfWindow.close()
     }
-    return null
   })
 
   createWindow()
@@ -227,4 +249,11 @@ app.on('window-all-closed', () => {
   stopWatching()
   stopGitSyncScheduler()
   if (process.platform !== 'darwin') app.quit()
+})
+
+app.on('before-quit', () => {
+  if (currentDb) {
+    try { currentDb.close() } catch {}
+    currentDb = null
+  }
 })

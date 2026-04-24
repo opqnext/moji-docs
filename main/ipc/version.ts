@@ -2,6 +2,7 @@ import { ipcMain } from 'electron'
 import { simpleGit } from 'simple-git'
 import { existsSync } from 'fs'
 import { join } from 'path'
+import { parseDoc } from '../front-matter'
 
 export function registerVersionIpc(docsRoot: string): void {
   ipcMain.handle('version:list', async (_e, filePath: string) => {
@@ -9,7 +10,7 @@ export function registerVersionIpc(docsRoot: string): void {
 
     try {
       const git = simpleGit(docsRoot)
-      const log = await git.log({ file: filePath, maxCount: 20 })
+      const log = await git.log({ file: filePath, maxCount: 10 })
 
       return log.all.map(entry => ({
         hash: entry.hash,
@@ -27,8 +28,14 @@ export function registerVersionIpc(docsRoot: string): void {
 
     try {
       const git = simpleGit(docsRoot)
-      const content = await git.show(`${commitHash}:${filePath}`)
-      return content
+      const raw = await git.show(`${commitHash}:${filePath}`)
+      const rawStr = typeof raw === 'string' ? raw : String(raw)
+      try {
+        const { content } = parseDoc(rawStr)
+        return content
+      } catch {
+        return rawStr
+      }
     } catch {
       return null
     }

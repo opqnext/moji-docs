@@ -12,7 +12,7 @@
     <div v-show="isExpanded" class="tree-children">
       <TreeNode
         v-for="child in node.children"
-        :key="child.id"
+        :key="child.file_path"
         :node="child"
         :expandedId="childExpandedId"
         @select="$emit('select', $event)"
@@ -25,17 +25,16 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 
-const props = defineProps<{ node: any; expandedId?: number }>()
+const props = defineProps<{ node: any; expandedId?: string }>()
 const emit = defineEmits(['select', 'expanded'])
 
 const isExpanded = ref(false)
-const childExpandedId = ref<number>(-1)
+const childExpandedId = ref<string>('')
 const hasChildren = computed(() => props.node.children && props.node.children.length > 0)
 
-// Accordion: when parent tells us another sibling expanded, collapse
 import { watch } from 'vue'
 watch(() => props.expandedId, (val) => {
-  if (val !== undefined && val !== props.node.id) {
+  if (val && val !== props.node.file_path) {
     isExpanded.value = false
   }
 })
@@ -44,14 +43,14 @@ function handleClick() {
   if (hasChildren.value) {
     isExpanded.value = !isExpanded.value
     if (isExpanded.value) {
-      emit('expanded', props.node.id)
+      emit('expanded', props.node.file_path)
     }
   } else {
     emit('select', props.node)
   }
 }
 
-function onChildExpanded(id: number) {
+function onChildExpanded(id: string) {
   childExpandedId.value = id
 }
 </script>

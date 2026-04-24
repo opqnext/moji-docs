@@ -66,34 +66,27 @@ function ensureGitignore(docsRoot: string): void {
   }
 }
 
-export async function commitChanges(docsRoot: string): Promise<void> {
-  const git = simpleGit(docsRoot)
-  if (!existsSync(join(docsRoot, '.git'))) return
-
-  await git.add('.')
-  const status = await git.status()
-
-  if (status.files.length > 0) {
-    await git.commit(`sync: ${localTimeString()}`)
-  }
-}
-
-export async function syncGit(db: Database.Database, docsRoot: string): Promise<{ success: boolean; message: string; conflicts: string[] }> {
+export async function syncGit(db: Database.Database, docsRoot: string, silent = false): Promise<{ success: boolean; message: string; conflicts: string[] }> {
   const config = getGitConfig(db)
 
   if (!config.url) {
     return { success: true, message: '未配置 Git 仓库', conflicts: [] }
   }
 
-  syncQueue.updateState('syncing')
+  if (!silent) {
+    syncQueue.updateState('syncing')
+  }
 
   try {
     const git = await ensureGitRepo(docsRoot, config.url, config.branch)
 
+    let hasLocalCommit = false
     await git.add('.')
     const status = await git.status()
     if (status.files.length > 0) {
+      if (silent) syncQueue.updateState('syncing')
       await git.commit(`sync: ${localTimeString()}`)
+      hasLocalCommit = true
     }
 
     let remoteHasBranch = false
@@ -105,28 +98,49 @@ export async function syncGit(db: Database.Database, docsRoot: string): Promise<
     }
 
     let conflicts: string[] = []
+    let pulledNewContent = false
     if (remoteHasBranch) {
       try {
+        const beforePull = await git.log({ maxCount: 1 })
         await git.pull('origin', config.branch, ['--no-rebase'])
+        const afterPull = await git.log({ maxCount: 1 })
+        pulledNewContent = beforePull.latest?.hash !== afterPull.latest?.hash
+        if (pulledNewContent && silent) syncQueue.updateState('syncing')
       } catch (pullErr: any) {
         const pullStatus = await git.status()
         if (pullStatus.conflicted.length > 0) {
+          if (silent) syncQueue.updateState('syncing')
           conflicts = await resolveConflicts(git, docsRoot, pullStatus.conflicted)
+          pulledNewContent = true
         } else {
           throw pullErr
         }
       }
     }
 
-    try {
-      await git.push('origin', config.branch, ['--set-upstream'])
-    } catch (pushErr: any) {
-      syncQueue.markError(`推送失败: ${pushErr.message}`)
-      return { success: false, message: `推送失败: ${pushErr.message}`, conflicts }
+    const postStatus = await git.status()
+    const needsPush = hasLocalCommit || postStatus.ahead > 0
+
+    if (needsPush) {
+      if (silent) syncQueue.updateState('syncing')
+      try {
+        await git.push('origin', config.branch, ['--set-upstream'])
+      } catch (pushErr: any) {
+        syncQueue.markError(`推送失败: ${pushErr.message}`)
+        return { success: false, message: `推送失败: ${pushErr.message}`, conflicts }
+      }
     }
 
-    incrementalReindex(db, docsRoot)
+    if (pulledNewContent || conflicts.length > 0) {
+      incrementalReindex(db, docsRoot)
+    }
+
     syncQueue.markSynced()
+
+    const didSomething = hasLocalCommit || pulledNewContent || conflicts.length > 0 || needsPush
+    if (!didSomething) {
+      return { success: true, message: '无需同步，本地和远程均无变更', conflicts: [] }
+    }
 
     const msg = conflicts.length > 0
       ? `同步完成，${conflicts.length} 个文件有冲突已保留两个版本`
@@ -215,7 +229,7 @@ export function startGitSyncScheduler(db: Database.Database, docsRoot: string): 
   syncTimer = setInterval(async () => {
     if (!syncQueue.shouldRetry()) return
     try {
-      await syncGit(db, docsRoot)
+      await syncGit(db, docsRoot, true)
     } catch (e: any) {
       console.error('Git sync scheduler error:', e.message)
     }
