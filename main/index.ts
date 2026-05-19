@@ -88,7 +88,7 @@ function createWindow(): void {
   }
 }
 
-function initApp(docsRoot: string): Database.Database {
+async function initApp(docsRoot: string): Promise<Database.Database> {
   if (!existsSync(docsRoot)) {
     mkdirSync(docsRoot, { recursive: true })
   }
@@ -103,14 +103,14 @@ function initApp(docsRoot: string): Database.Database {
     appInitialized = true
   }
 
-  incrementalReindex(db, docsRoot)
+  await incrementalReindex(db, docsRoot)
   startWatching(db, docsRoot)
   startGitSyncScheduler(db, docsRoot)
 
   return db
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   protocol.handle('moji-file', (request) => {
     const filePath = decodeURIComponent(request.url.replace('moji-file://', ''))
     const resolved = resolve(filePath)
@@ -128,7 +128,7 @@ app.whenReady().then(() => {
   buildAppMenu()
 
   if (config?.docsRoot) {
-    db = initApp(config.docsRoot)
+    db = await initApp(config.docsRoot)
     currentDb = db
 
     const settings = db.prepare('SELECT value FROM app_settings WHERE key = ?').get('git_url') as any
@@ -167,7 +167,7 @@ app.whenReady().then(() => {
 
     saveConfig({ docsRoot })
     currentDocsRoot = docsRoot
-    db = initApp(docsRoot)
+    db = await initApp(docsRoot)
     currentDb = db
 
     if (gitUrl) {

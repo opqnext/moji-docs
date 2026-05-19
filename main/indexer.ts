@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3'
-import { join, dirname, relative, basename, extname } from 'path'
-import { readdirSync, readFileSync, statSync, existsSync, writeFileSync } from 'fs'
+import { join, dirname, relative, basename } from 'path'
+import { existsSync, statSync, readFileSync, writeFileSync, readdirSync } from 'fs'
+import { readdir, stat, readFile } from 'fs/promises'
 import { createHash } from 'crypto'
 import { parseDoc, filenameToTitle, buildDefaultMeta, serializeDoc } from './front-matter'
 import { dropAndRebuildFts } from './database'
@@ -15,13 +16,14 @@ export interface IndexStats {
   failures: Array<{ filePath: string; error: string }>
 }
 
-export function incrementalReindex(db: Database.Database, docsRoot: string, clearFirst = false): IndexStats {
-  const stats: IndexStats = { added: 0, updated: 0, removed: 0, unchanged: 0, total: 0, failures: [] }
-  const diskFiles = new Map<string, { mtime: number }>()
+let cachedUpsertStmt: Database.Statement | null = null
+let cachedDeleteStmt: Database.Statement | null = null
+let stmtDb: Database.Database | null = null
 
-  scanDirectory(docsRoot, docsRoot, diskFiles)
-
-  const upsert = db.prepare(`
+function getUpsertStmt(db: Database.Database): Database.Statement {
+  if (cachedUpsertStmt && stmtDb === db) return cachedUpsertStmt
+  stmtDb = db
+  cachedUpsertStmt = db.prepare(`
     INSERT INTO doc_index (file_path, title, content, tags, is_pinned, is_directory, sort, parent_path, file_hash, file_mtime, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(file_path) DO UPDATE SET
@@ -35,82 +37,25 @@ export function incrementalReindex(db: Database.Database, docsRoot: string, clea
       file_mtime = excluded.file_mtime,
       updated_at = excluded.updated_at
   `)
-
-  const deleteStmt = db.prepare('DELETE FROM doc_index WHERE file_path = ?')
-
-  const tx = db.transaction(() => {
-    if (clearFirst) {
-      db.exec('DELETE FROM doc_index')
-    }
-
-    const existingRows = db.prepare('SELECT rowid, file_path, file_mtime, file_hash FROM doc_index').all() as any[]
-    const existingMap = new Map<string, { rowid: number; file_mtime: number; file_hash: string }>()
-    for (const row of existingRows) {
-      existingMap.set(row.file_path, { rowid: row.rowid, file_mtime: row.file_mtime, file_hash: row.file_hash })
-    }
-
-    for (const [filePath, { mtime }] of diskFiles) {
-      const existing = existingMap.get(filePath)
-
-      if (existing && Math.abs(existing.file_mtime - mtime) < 1) {
-        stats.unchanged++
-        existingMap.delete(filePath)
-        continue
-      }
-
-      const fullPath = join(docsRoot, filePath)
-      const isDir = filePath.endsWith('/_index.md')
-      const entry = buildIndexEntry(fullPath, filePath, docsRoot, isDir, stats.failures)
-
-      if (!entry) {
-        existingMap.delete(filePath)
-        continue
-      }
-
-      if (existing && existing.file_hash === entry.file_hash) {
-        stats.unchanged++
-        existingMap.delete(filePath)
-        continue
-      }
-
-      upsert.run(
-        entry.file_path, entry.title, entry.content, entry.tags,
-        entry.is_pinned ? 1 : 0, entry.is_directory ? 1 : 0,
-        entry.sort, entry.parent_path, entry.file_hash, mtime,
-        entry.created_at, entry.updated_at
-      )
-
-      if (existing) {
-        stats.updated++
-      } else {
-        stats.added++
-      }
-      existingMap.delete(filePath)
-    }
-
-    indexDirectories(db, docsRoot)
-
-    for (const [filePath] of existingMap) {
-      deleteStmt.run(filePath)
-      stats.removed++
-    }
-  })
-
-  tx()
-  stats.total = stats.added + stats.updated + stats.unchanged
-  return stats
+  cachedDeleteStmt = db.prepare('DELETE FROM doc_index WHERE file_path = ?')
+  return cachedUpsertStmt
 }
 
-export function fullRebuild(db: Database.Database, docsRoot: string): IndexStats {
-  dropAndRebuildFts(db)
-  return incrementalReindex(db, docsRoot, true)
+function getDeleteStmt(db: Database.Database): Database.Statement {
+  if (cachedDeleteStmt && stmtDb === db) return cachedDeleteStmt
+  getUpsertStmt(db)
+  return cachedDeleteStmt!
 }
 
-function scanDirectory(dir: string, docsRoot: string, result: Map<string, { mtime: number }>): void {
-  if (!existsSync(dir)) return
+async function scanDirectoryAsync(dir: string, docsRoot: string, result: Map<string, { mtime: number }>): Promise<void> {
+  let entries
+  try {
+    entries = await readdir(dir, { withFileTypes: true })
+  } catch {
+    return
+  }
 
-  const entries = readdirSync(dir, { withFileTypes: true })
-
+  const promises: Promise<void>[] = []
   for (const entry of entries) {
     if (entry.name.startsWith('.')) continue
     if (entry.name === 'assets' && dir === docsRoot) continue
@@ -118,21 +63,24 @@ function scanDirectory(dir: string, docsRoot: string, result: Map<string, { mtim
     const fullPath = join(dir, entry.name)
 
     if (entry.isDirectory()) {
-      scanDirectory(fullPath, docsRoot, result)
+      promises.push(scanDirectoryAsync(fullPath, docsRoot, result))
     } else if (entry.isFile() && entry.name.endsWith('.md')) {
-      const relPath = relative(docsRoot, fullPath).replace(/\\/g, '/')
-      const st = statSync(fullPath)
-      result.set(relPath, { mtime: st.mtimeMs })
+      promises.push(
+        stat(fullPath).then(st => {
+          const relPath = relative(docsRoot, fullPath).replace(/\\/g, '/')
+          result.set(relPath, { mtime: st.mtimeMs })
+        }).catch(() => {})
+      )
     }
   }
+  await Promise.all(promises)
 }
 
-function buildIndexEntry(
-  fullPath: string, filePath: string, docsRoot: string, isDir: boolean,
+function buildIndexEntryFromContent(
+  raw: string, filePath: string, docsRoot: string, isDir: boolean,
   failures?: Array<{ filePath: string; error: string }>
 ) {
   try {
-    const raw = readFileSync(fullPath, 'utf-8')
     const { meta, content } = parseDoc(raw)
 
     let parentPath: string
@@ -170,10 +118,111 @@ function buildIndexEntry(
   }
 }
 
-function indexDirectories(db: Database.Database, docsRoot: string): void {
-  const dirs = new Set<string>()
+export async function incrementalReindex(db: Database.Database, docsRoot: string, clearFirst = false): Promise<IndexStats> {
+  const stats: IndexStats = { added: 0, updated: 0, removed: 0, unchanged: 0, total: 0, failures: [] }
 
-  collectDirs(docsRoot, docsRoot, dirs)
+  // Phase 1: async directory scan
+  const diskFiles = new Map<string, { mtime: number }>()
+  await scanDirectoryAsync(docsRoot, docsRoot, diskFiles)
+
+  // Phase 2: determine changed files and pre-read them async
+  const existingRows = db.prepare('SELECT rowid, file_path, file_mtime, file_hash FROM doc_index').all() as any[]
+  const existingMap = new Map<string, { rowid: number; file_mtime: number; file_hash: string }>()
+  for (const row of existingRows) {
+    existingMap.set(row.file_path, { rowid: row.rowid, file_mtime: row.file_mtime, file_hash: row.file_hash })
+  }
+
+  const unchangedPaths = new Set<string>()
+  const filesToRead: string[] = []
+  for (const [filePath, { mtime }] of diskFiles) {
+    const existing = existingMap.get(filePath)
+    if (existing && Math.abs(existing.file_mtime - mtime) < 1) {
+      unchangedPaths.add(filePath)
+      continue
+    }
+    filesToRead.push(filePath)
+  }
+
+  const fileContents = new Map<string, string>()
+  await Promise.all(filesToRead.map(fp =>
+    readFile(join(docsRoot, fp), 'utf-8')
+      .then(raw => fileContents.set(fp, raw))
+      .catch(() => {})
+  ))
+
+  // Phase 3: sync DB transaction with all data in memory
+  const upsert = getUpsertStmt(db)
+  const deleteStmt = getDeleteStmt(db)
+
+  const tx = db.transaction(() => {
+    if (clearFirst) {
+      db.exec('DELETE FROM doc_index')
+    }
+
+    for (const [filePath, { mtime }] of diskFiles) {
+      if (unchangedPaths.has(filePath)) {
+        stats.unchanged++
+        existingMap.delete(filePath)
+        continue
+      }
+
+      const raw = fileContents.get(filePath)
+      if (!raw) {
+        existingMap.delete(filePath)
+        continue
+      }
+
+      const existing = existingMap.get(filePath)
+      const isDir = filePath.endsWith('/_index.md')
+      const entry = buildIndexEntryFromContent(raw, filePath, docsRoot, isDir, stats.failures)
+
+      if (!entry) {
+        existingMap.delete(filePath)
+        continue
+      }
+
+      if (existing && existing.file_hash === entry.file_hash) {
+        stats.unchanged++
+        existingMap.delete(filePath)
+        continue
+      }
+
+      upsert.run(
+        entry.file_path, entry.title, entry.content, entry.tags,
+        entry.is_pinned ? 1 : 0, entry.is_directory ? 1 : 0,
+        entry.sort, entry.parent_path, entry.file_hash, mtime,
+        entry.created_at, entry.updated_at
+      )
+
+      if (existing) {
+        stats.updated++
+      } else {
+        stats.added++
+      }
+      existingMap.delete(filePath)
+    }
+
+    indexDirectoriesSync(db, docsRoot)
+
+    for (const [filePath] of existingMap) {
+      deleteStmt.run(filePath)
+      stats.removed++
+    }
+  })
+
+  tx()
+  stats.total = stats.added + stats.updated + stats.unchanged
+  return stats
+}
+
+export async function fullRebuild(db: Database.Database, docsRoot: string): Promise<IndexStats> {
+  dropAndRebuildFts(db)
+  return incrementalReindex(db, docsRoot, true)
+}
+
+function indexDirectoriesSync(db: Database.Database, docsRoot: string): void {
+  const dirs = new Set<string>()
+  collectDirsSync(docsRoot, docsRoot, dirs)
 
   const upsertDir = db.prepare(`
     INSERT INTO doc_index (file_path, title, content, tags, is_pinned, is_directory, sort, parent_path, file_hash, file_mtime, created_at, updated_at)
@@ -218,9 +267,14 @@ function indexDirectories(db: Database.Database, docsRoot: string): void {
   }
 }
 
-function collectDirs(dir: string, docsRoot: string, result: Set<string>): void {
+function collectDirsSync(dir: string, docsRoot: string, result: Set<string>): void {
   if (!existsSync(dir)) return
-  const entries = readdirSync(dir, { withFileTypes: true })
+  let entries
+  try {
+    entries = readdirSync(dir, { withFileTypes: true })
+  } catch {
+    return
+  }
 
   for (const entry of entries) {
     if (entry.name.startsWith('.')) continue
@@ -230,7 +284,7 @@ function collectDirs(dir: string, docsRoot: string, result: Set<string>): void {
     if (entry.isDirectory()) {
       const relPath = relative(docsRoot, fullPath).replace(/\\/g, '/')
       result.add(relPath)
-      collectDirs(fullPath, docsRoot, result)
+      collectDirsSync(fullPath, docsRoot, result)
     }
   }
 }
@@ -239,30 +293,18 @@ export function reindexSingleFile(db: Database.Database, docsRoot: string, fileP
   const fullPath = join(docsRoot, filePath)
 
   if (!existsSync(fullPath)) {
-    db.prepare('DELETE FROM doc_index WHERE file_path = ?').run(filePath)
+    getDeleteStmt(db).run(filePath)
     return
   }
 
   const st = statSync(fullPath)
   const isDir = filePath.endsWith('/_index.md')
-  const entry = buildIndexEntry(fullPath, filePath, docsRoot, isDir)
+  const raw = readFileSync(fullPath, 'utf-8')
+  const entry = buildIndexEntryFromContent(raw, filePath, docsRoot, isDir)
 
   if (!entry) return
 
-  db.prepare(`
-    INSERT INTO doc_index (file_path, title, content, tags, is_pinned, is_directory, sort, parent_path, file_hash, file_mtime, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(file_path) DO UPDATE SET
-      title = excluded.title,
-      content = excluded.content,
-      tags = excluded.tags,
-      is_pinned = excluded.is_pinned,
-      sort = excluded.sort,
-      parent_path = excluded.parent_path,
-      file_hash = excluded.file_hash,
-      file_mtime = excluded.file_mtime,
-      updated_at = excluded.updated_at
-  `).run(
+  getUpsertStmt(db).run(
     entry.file_path, entry.title, entry.content, entry.tags,
     entry.is_pinned ? 1 : 0, entry.is_directory ? 1 : 0,
     entry.sort, entry.parent_path, entry.file_hash, st.mtimeMs,
@@ -271,5 +313,5 @@ export function reindexSingleFile(db: Database.Database, docsRoot: string, fileP
 }
 
 export function removeFromIndex(db: Database.Database, filePath: string): void {
-  db.prepare('DELETE FROM doc_index WHERE file_path = ?').run(filePath)
+  getDeleteStmt(db).run(filePath)
 }

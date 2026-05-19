@@ -16,11 +16,6 @@ let currentStatus: SyncStatus = {
   errorMessage: ''
 }
 
-let failureCount = 0
-let lastFailureTime = 0
-const MAX_RETRY_FAILURES = 3
-const BASE_BACKOFF_MS = 60 * 1000
-const MAX_BACKOFF_MS = 30 * 60 * 1000
 const pendingFiles = new Set<string>()
 
 export function getStatus(): SyncStatus {
@@ -40,13 +35,12 @@ function localTimeString(): string {
 
 export function markPending(filePath: string): void {
   pendingFiles.add(filePath)
-  if (currentStatus.state !== 'syncing') {
+  if (currentStatus.state !== 'syncing' && currentStatus.state !== 'error') {
     updateState('pending', { pendingDocs: pendingFiles.size })
   }
 }
 
 export function markSynced(): void {
-  failureCount = 0
   pendingFiles.clear()
   updateState('synced', {
     pendingDocs: 0,
@@ -56,26 +50,7 @@ export function markSynced(): void {
 }
 
 export function markError(message: string): void {
-  failureCount++
-  lastFailureTime = Date.now()
   updateState('error', { errorMessage: message })
-}
-
-export function shouldRetry(): boolean {
-  if (failureCount === 0) return true
-  if (failureCount >= MAX_RETRY_FAILURES) {
-    const backoff = Math.min(
-      BASE_BACKOFF_MS * Math.pow(2, failureCount - MAX_RETRY_FAILURES),
-      MAX_BACKOFF_MS
-    )
-    return (Date.now() - lastFailureTime) >= backoff
-  }
-  return true
-}
-
-export function resetFailures(): void {
-  failureCount = 0
-  lastFailureTime = 0
 }
 
 export function hasPending(): boolean {

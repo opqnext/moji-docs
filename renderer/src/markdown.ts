@@ -3,13 +3,18 @@ import { markedHighlight } from 'marked-highlight'
 import hljs from 'highlight.js'
 import DOMPurify from 'dompurify'
 
+const AUTO_DETECT_LANGUAGES = [
+  'javascript', 'typescript', 'python', 'bash',
+  'json', 'html', 'css', 'sql'
+]
+
 marked.use(markedHighlight({
   langPrefix: 'hljs language-',
   highlight(code: string, lang: string) {
     if (lang && hljs.getLanguage(lang)) {
       return hljs.highlight(code, { language: lang }).value
     }
-    return hljs.highlightAuto(code).value
+    return hljs.highlightAuto(code, AUTO_DETECT_LANGUAGES).value
   }
 }))
 

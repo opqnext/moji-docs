@@ -66,16 +66,14 @@ function ensureGitignore(docsRoot: string): void {
   }
 }
 
-export async function syncGit(db: Database.Database, docsRoot: string, silent = false): Promise<{ success: boolean; message: string; conflicts: string[] }> {
+export async function syncGit(db: Database.Database, docsRoot: string): Promise<{ success: boolean; message: string; conflicts: string[] }> {
   const config = getGitConfig(db)
 
   if (!config.url) {
     return { success: true, message: '未配置 Git 仓库', conflicts: [] }
   }
 
-  if (!silent) {
-    syncQueue.updateState('syncing')
-  }
+  syncQueue.updateState('syncing')
 
   try {
     const git = await ensureGitRepo(docsRoot, config.url, config.branch)
@@ -84,7 +82,6 @@ export async function syncGit(db: Database.Database, docsRoot: string, silent = 
     await git.add('.')
     const status = await git.status()
     if (status.files.length > 0) {
-      if (silent) syncQueue.updateState('syncing')
       await git.commit(`sync: ${localTimeString()}`)
       hasLocalCommit = true
     }
@@ -105,11 +102,9 @@ export async function syncGit(db: Database.Database, docsRoot: string, silent = 
         await git.pull('origin', config.branch, ['--no-rebase'])
         const afterPull = await git.log({ maxCount: 1 })
         pulledNewContent = beforePull.latest?.hash !== afterPull.latest?.hash
-        if (pulledNewContent && silent) syncQueue.updateState('syncing')
       } catch (pullErr: any) {
         const pullStatus = await git.status()
         if (pullStatus.conflicted.length > 0) {
-          if (silent) syncQueue.updateState('syncing')
           conflicts = await resolveConflicts(git, docsRoot, pullStatus.conflicted)
           pulledNewContent = true
         } else {
@@ -122,7 +117,6 @@ export async function syncGit(db: Database.Database, docsRoot: string, silent = 
     const needsPush = hasLocalCommit || postStatus.ahead > 0
 
     if (needsPush) {
-      if (silent) syncQueue.updateState('syncing')
       try {
         await git.push('origin', config.branch, ['--set-upstream'])
       } catch (pushErr: any) {
@@ -132,7 +126,7 @@ export async function syncGit(db: Database.Database, docsRoot: string, silent = 
     }
 
     if (pulledNewContent || conflicts.length > 0) {
-      incrementalReindex(db, docsRoot)
+      await incrementalReindex(db, docsRoot)
     }
 
     syncQueue.markSynced()
@@ -227,9 +221,8 @@ export function startGitSyncScheduler(db: Database.Database, docsRoot: string): 
   if (config.interval <= 0 || !config.url) return
 
   syncTimer = setInterval(async () => {
-    if (!syncQueue.shouldRetry()) return
     try {
-      await syncGit(db, docsRoot, true)
+      await syncGit(db, docsRoot)
     } catch (e: any) {
       console.error('Git sync scheduler error:', e.message)
     }

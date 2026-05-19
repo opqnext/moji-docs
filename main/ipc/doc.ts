@@ -2,6 +2,7 @@ import { ipcMain } from 'electron'
 import Database from 'better-sqlite3'
 import { join, dirname, basename, relative } from 'path'
 import { readFileSync, writeFileSync, mkdirSync, existsSync, unlinkSync, renameSync, readdirSync, rmdirSync } from 'fs'
+import { readFile, writeFile } from 'fs/promises'
 import os from 'os'
 import { parseDoc, serializeDoc, nowString, titleToFilename, buildDefaultMeta } from '../front-matter'
 import { reindexSingleFile, removeFromIndex, incrementalReindex, fullRebuild } from '../indexer'
@@ -49,28 +50,35 @@ export function registerDocIpc(db: Database.Database, docsRoot: string): void {
       'SELECT rowid, file_path, title, is_directory, parent_path, sort FROM doc_index ORDER BY is_directory DESC, sort DESC, title ASC'
     ).all() as any[]
 
+    const childrenMap = new Map<string, any[]>()
+    for (const d of all) {
+      const key = d.parent_path || ''
+      let list = childrenMap.get(key)
+      if (!list) { list = []; childrenMap.set(key, list) }
+      list.push(d)
+    }
+
     function buildTree(parentPath: string): any[] {
-      return all
-        .filter(d => d.parent_path === parentPath)
-        .map(d => ({
-          ...d,
-          children: d.is_directory ? buildTree(
-            d.file_path.endsWith('/_index.md') ? dirname(d.file_path) : d.file_path
-          ) : []
-        }))
+      return (childrenMap.get(parentPath) || []).map(d => ({
+        ...d,
+        children: d.is_directory ? buildTree(
+          d.file_path.endsWith('/_index.md') ? dirname(d.file_path) : d.file_path
+        ) : []
+      }))
     }
 
     return buildTree('')
   })
 
-  ipcMain.handle('doc:getDetail', (_e, filePath: string) => {
+  ipcMain.handle('doc:getDetail', async (_e, filePath: string) => {
     const indexRow = db.prepare('SELECT * FROM doc_index WHERE file_path = ?').get(filePath) as any
     if (!indexRow) return null
 
     let content = ''
     const fullPath = join(docsRoot, filePath)
     if (existsSync(fullPath)) {
-      const { content: c } = parseDoc(readFileSync(fullPath, 'utf-8'))
+      const raw = await readFile(fullPath, 'utf-8')
+      const { content: c } = parseDoc(raw)
       content = c
     }
 
@@ -103,12 +111,12 @@ export function registerDocIpc(db: Database.Database, docsRoot: string): void {
     }
   })
 
-  ipcMain.handle('doc:save', (_e, params: any) => {
+  ipcMain.handle('doc:save', async (_e, params: any) => {
     const now = nowString()
 
     if (params.file_path && existsSync(join(docsRoot, params.file_path))) {
       const fullPath = join(docsRoot, params.file_path)
-      const raw = readFileSync(fullPath, 'utf-8')
+      const raw = await readFile(fullPath, 'utf-8')
       const { meta, rawFrontMatter } = parseDoc(raw)
 
       const updatedMeta = {
@@ -137,14 +145,14 @@ export function registerDocIpc(db: Database.Database, docsRoot: string): void {
             }
 
             markSelfWrite(finalPath)
-            writeFileSync(fullPath, newRaw, 'utf-8')
+            await writeFile(fullPath, newRaw, 'utf-8')
 
             const oldDirFull = dirname(fullPath)
             mkdirSync(dirname(newDirFull), { recursive: true })
             renameSync(oldDirFull, newDirFull)
 
             try {
-              incrementalReindex(db, docsRoot)
+              await incrementalReindex(db, docsRoot)
               syncQueue.markPending(`${newDirPath}/_index.md`)
             } catch (reindexErr) {
               try { mkdirSync(dirname(oldDirFull), { recursive: true }); renameSync(newDirFull, oldDirFull) } catch {}
@@ -164,7 +172,7 @@ export function registerDocIpc(db: Database.Database, docsRoot: string): void {
             }
 
             markSelfWrite(finalPath)
-            writeFileSync(newFullPath, newRaw, 'utf-8')
+            await writeFile(newFullPath, newRaw, 'utf-8')
 
             markSelfWrite(params.file_path)
             unlinkSync(fullPath)
@@ -178,7 +186,7 @@ export function registerDocIpc(db: Database.Database, docsRoot: string): void {
       }
 
       markSelfWrite(finalPath)
-      writeFileSync(fullPath, newRaw, 'utf-8')
+      await writeFile(fullPath, newRaw, 'utf-8')
       reindexSingleFile(db, docsRoot, finalPath)
       syncQueue.markPending(finalPath)
       return finalPath
@@ -206,7 +214,7 @@ export function registerDocIpc(db: Database.Database, docsRoot: string): void {
       const raw = serializeDoc(meta, content)
 
       markSelfWrite(filePath)
-      writeFileSync(join(docsRoot, filePath), raw, 'utf-8')
+      await writeFile(join(docsRoot, filePath), raw, 'utf-8')
     } else {
       const fileName = titleToFilename(title) + '.md'
       filePath = parentPath ? `${parentPath}/${fileName}` : fileName
@@ -226,7 +234,7 @@ export function registerDocIpc(db: Database.Database, docsRoot: string): void {
       const raw = serializeDoc(meta, content)
 
       markSelfWrite(filePath)
-      writeFileSync(fullPath, raw, 'utf-8')
+      await writeFile(fullPath, raw, 'utf-8')
     }
 
     reindexSingleFile(db, docsRoot, filePath)
@@ -262,7 +270,7 @@ export function registerDocIpc(db: Database.Database, docsRoot: string): void {
     return true
   })
 
-  ipcMain.handle('doc:move', (_e, filePath: string, targetParentPath: string) => {
+  ipcMain.handle('doc:move', async (_e, filePath: string, targetParentPath: string) => {
     const fullPath = join(docsRoot, filePath)
     if (!existsSync(fullPath)) throw new Error('文件不存在')
 
@@ -293,7 +301,7 @@ export function registerDocIpc(db: Database.Database, docsRoot: string): void {
 
       try {
         cleanEmptyParents(dirname(srcDirFull), docsRoot)
-        incrementalReindex(db, docsRoot)
+        await incrementalReindex(db, docsRoot)
         syncQueue.markPending(`${newDirRel}/_index.md`)
       } catch (reindexErr) {
         try { mkdirSync(dirname(srcDirFull), { recursive: true }); renameSync(newDirFull, srcDirFull) } catch {}
@@ -446,8 +454,8 @@ export function registerDocIpc(db: Database.Database, docsRoot: string): void {
     return rows
   })
 
-  ipcMain.handle('index:rebuild', () => {
-    return fullRebuild(db, docsRoot)
+  ipcMain.handle('index:rebuild', async () => {
+    return await fullRebuild(db, docsRoot)
   })
 
   ipcMain.handle('index:status', () => {
