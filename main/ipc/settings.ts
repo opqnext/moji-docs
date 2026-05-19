@@ -44,7 +44,6 @@ export function registerSettingsIpc(db: Database.Database, docsRoot: string): vo
     tx(Object.entries(normalized))
 
     if ('git_interval' in normalized || 'git_url' in normalized) {
-      syncQueue.resetFailures()
       startGitSyncScheduler(db, docsRoot)
     }
 

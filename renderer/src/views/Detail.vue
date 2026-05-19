@@ -390,8 +390,14 @@ async function onDrop(e: DragEvent) {
   loadDetail()
 }
 
+let scrollRafId = 0
+
 function onContentScroll() {
-  showBackTop.value = (contentRef.value?.scrollTop || 0) > 300
+  if (scrollRafId) return
+  scrollRafId = requestAnimationFrame(() => {
+    scrollRafId = 0
+    showBackTop.value = (contentRef.value?.scrollTop || 0) > 300
+  })
 }
 
 watch(() => route.params.id, () => {
@@ -452,7 +458,7 @@ watch(detail, (val) => {
     nextTick(() => {
       const el = contentRef.value
       if (el) {
-        el.addEventListener('scroll', onContentScroll)
+        el.addEventListener('scroll', onContentScroll, { passive: true })
         scrollCleanup = () => el.removeEventListener('scroll', onContentScroll)
       }
       const body = el?.querySelector('.content-body')

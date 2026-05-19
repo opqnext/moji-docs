@@ -169,12 +169,19 @@ function editorRedo() {
   updatePreview()
 }
 
+let previewTimer: any = null
+
 function updatePreview() {
   previewHtml.value = renderMarkdown(content.value)
 }
 
+function schedulePreview() {
+  if (previewTimer) clearTimeout(previewTimer)
+  previewTimer = setTimeout(updatePreview, 150)
+}
+
 function onContentInput() {
-  updatePreview()
+  schedulePreview()
   markUnsaved()
   if (snapshotTimer) clearTimeout(snapshotTimer)
   snapshotTimer = setTimeout(takeSnapshot, 500)
@@ -470,13 +477,11 @@ async function saveDoc(silent = false) {
     return
   }
   isSaving = true
-  const html = renderMarkdown(content.value)
   try {
     const resultPath = await api.saveDoc({
       file_path: filePath.value || undefined,
       title: title.value,
       content: content.value,
-      content_html: html,
       tags: tags.value,
       is_directory: isDirectory.value,
       parent_path: parentPath.value
@@ -546,6 +551,7 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   if (autoSaveTimer) clearTimeout(autoSaveTimer)
   if (snapshotTimer) clearTimeout(snapshotTimer)
+  if (previewTimer) clearTimeout(previewTimer)
   window.removeEventListener('beforeunload', handleBeforeUnload)
   if (title.value.trim() && (content.value !== lastSavedContent || title.value !== lastSavedTitle)) {
     saveDoc(true)
