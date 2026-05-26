@@ -46,6 +46,9 @@ const api = {
   uploadImage: (base64: string, ext: string) => window.mojiApi.invoke('upload:image', base64, ext),
   cleanImages: () => window.mojiApi.invoke('upload:cleanImages'),
 
+  copyImage: (src: string) => window.mojiApi.invoke('image:copy', src),
+  saveImageAs: (src: string) => window.mojiApi.invoke('image:saveAs', src),
+
   rebuildIndex: () => window.mojiApi.invoke('index:rebuild'),
   indexStatus: () => window.mojiApi.invoke('index:status'),
 

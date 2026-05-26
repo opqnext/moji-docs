@@ -90,7 +90,7 @@
 
     <!-- Editor body -->
     <div class="editor-body" :class="{ 'single-column': layout === 'single', 'preview-only': previewMode }">
-      <div class="editor-pane" v-show="!previewMode">
+      <div class="editor-pane" v-show="!previewMode" @dragover.prevent="onEditorDragOver" @dragleave="onEditorDragLeave" @drop.prevent="handleDrop" :class="{ 'editor-dragover': editorDragging }">
         <textarea
           ref="textareaRef"
           v-model="content"
@@ -102,8 +102,13 @@
         ></textarea>
       </div>
       <div class="preview-pane" ref="previewRef" v-show="layout === 'double' || previewMode">
-        <div class="content-body" v-html="previewHtml"></div>
+        <div class="content-body" v-html="previewHtml" @contextmenu="imgMenu.onContextMenu"></div>
       </div>
+    </div>
+
+    <!-- Image context menu (preview pane) -->
+    <div v-if="imgMenu.menuVisible.value" class="image-ctx-menu" :style="{ left: imgMenu.menuX.value + 'px', top: imgMenu.menuY.value + 'px' }">
+      <button class="ctx-item" @click="imgMenu.copyImage()">复制图片</button>
     </div>
   </div>
 </template>
@@ -113,6 +118,7 @@ import { ref, inject, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { renderMarkdown } from '../markdown'
 import api from '../api'
+import { useImageContextMenu } from '../composables/useImageContextMenu'
 
 const router = useRouter()
 const route = useRoute()
@@ -130,6 +136,11 @@ const previewHtml = ref('')
 const textareaRef = ref<HTMLTextAreaElement>()
 const previewRef = ref<HTMLElement>()
 const titleInput = ref<HTMLInputElement>()
+
+const imgMenu = useImageContextMenu({
+  containerRef: () => previewRef.value,
+  toast
+})
 let syncingScroll = false
 
 const saveStatus = ref<'saved' | 'unsaved' | ''>('')
@@ -265,6 +276,38 @@ async function handlePaste(e: ClipboardEvent) {
       reader.readAsDataURL(file)
       break
     }
+  }
+}
+
+const editorDragging = ref(false)
+
+function onEditorDragOver(e: DragEvent) {
+  if (e.dataTransfer?.types.includes('Files')) editorDragging.value = true
+}
+
+function onEditorDragLeave() {
+  editorDragging.value = false
+}
+
+async function handleDrop(e: DragEvent) {
+  editorDragging.value = false
+  const files = e.dataTransfer?.files
+  if (!files) return
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i]
+    if (!file.type.startsWith('image/')) continue
+    const reader = new FileReader()
+    reader.onload = async () => {
+      const base64 = (reader.result as string).split(',')[1]
+      const ext = file.type.split('/')[1] || 'png'
+      try {
+        const url = await api.uploadImage(base64, ext)
+        insertMd(`![image](${url})`, '')
+      } catch {
+        toast('图片上传失败', 'error')
+      }
+    }
+    reader.readAsDataURL(file)
   }
 }
 
@@ -659,6 +702,8 @@ onBeforeUnmount(() => {
   overflow-y: auto;
   padding: 20px 24px;
 }
+.editor-pane.editor-dragover { background: color-mix(in srgb, var(--tc) 5%, transparent); }
+.editor-pane.editor-dragover textarea { opacity: 0.6; }
 .single-column .preview-pane { display: none; }
 .single-column .editor-pane { border-right: none; }
 .preview-only .editor-pane { display: none; }
