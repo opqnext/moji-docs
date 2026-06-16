@@ -28,23 +28,23 @@ export function uploadImage(docsRoot: string, base64Data: string, ext: string): 
   return `assets/${yearMonth}/${filename}`
 }
 
-export function cleanOrphanImages(db: Database.Database, docsRoot: string): { deleted: string[]; total: number } {
+export function cleanOrphanImages(_db: Database.Database, docsRoot: string): { deleted: string[]; total: number } {
   const assetsDir = getAssetsDir(docsRoot)
   if (!existsSync(assetsDir)) return { deleted: [], total: 0 }
 
-  const allContent = db.prepare(
-    "SELECT content FROM doc_index WHERE is_directory = 0 AND content != ''"
-  ).all() as { content: string }[]
-
   const referencedImages = new Set<string>()
-  const imgPattern = /!\[.*?\]\((assets\/[^)]+)\)/g
+  const mdPattern = /!\[.*?\]\((assets\/[^)]+)\)/g
+  const htmlPattern = /<img[^>]+src=["'](assets\/[^"']+)["']/g
 
-  for (const row of allContent) {
+  scanMarkdownFiles(docsRoot, docsRoot, (content) => {
     let match: RegExpExecArray | null
-    while ((match = imgPattern.exec(row.content)) !== null) {
+    while ((match = mdPattern.exec(content)) !== null) {
       referencedImages.add(match[1])
     }
-  }
+    while ((match = htmlPattern.exec(content)) !== null) {
+      referencedImages.add(match[1])
+    }
+  })
 
   const diskImages: string[] = []
   scanImages(assetsDir, docsRoot, diskImages)
@@ -63,6 +63,33 @@ export function cleanOrphanImages(db: Database.Database, docsRoot: string): { de
   }
 
   return { deleted, total: diskImages.length }
+}
+
+function scanMarkdownFiles(dir: string, docsRoot: string, onContent: (content: string) => void): void {
+  if (!existsSync(dir)) return
+  let entries
+  try {
+    entries = readdirSync(dir, { withFileTypes: true })
+  } catch {
+    return
+  }
+
+  for (const entry of entries) {
+    if (entry.name.startsWith('.')) continue
+    if (entry.name === 'assets' && dir === docsRoot) continue
+    const fullPath = join(dir, entry.name)
+
+    if (entry.isDirectory()) {
+      scanMarkdownFiles(fullPath, docsRoot, onContent)
+    } else if (entry.isFile() && entry.name.endsWith('.md')) {
+      try {
+        const content = readFileSync(fullPath, 'utf-8')
+        onContent(content)
+      } catch {
+        // skip unreadable files
+      }
+    }
+  }
 }
 
 function scanImages(dir: string, docsRoot: string, result: string[]): void {

@@ -5,21 +5,14 @@
         <span class="logo" @click="$router.push('/')">{{ siteName }}</span>
       </div>
       <div class="header-right">
-        <input class="search-input" v-model="searchKey" placeholder="搜索文档..." @input="doSearch" />
+        <input class="search-input" v-model="headerSearchKey" placeholder="搜索文档..." @keydown.enter="openSearchWithKey" />
         <router-link to="/" class="active">文档</router-link>
         <router-link to="/settings">设置</router-link>
         <SyncStatus />
       </div>
     </header>
 
-    <!-- Search overlay -->
-    <div v-if="searchKey && searchResults.length > 0" style="position:absolute;top:52px;left:0;right:0;background:#fff;z-index:100;padding:12px 24px;border-bottom:1px solid #e8e8e8;box-shadow:0 4px 12px rgba(0,0,0,0.08);">
-      <div v-for="item in searchResults" :key="item.file_path" class="doc-item" @click="goDoc(item.file_path)">
-        <svg class="doc-icon" v-if="item.is_directory" viewBox="0 0 24 24" fill="none" stroke="var(--tc)" stroke-width="1.5"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
-        <svg class="doc-icon" v-else viewBox="0 0 24 24" fill="none" stroke="#999" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/></svg>
-        <span class="doc-title">{{ item.title }}</span>
-      </div>
-    </div>
+    <SearchOverlay v-model:visible="showSearch" :initial-keyword="headerSearchKey" @select="onSearchSelect" />
 
     <div class="breadcrumb">
       <router-link to="/">首页</router-link>
@@ -150,6 +143,30 @@
 
     <MoveModal ref="moveRef" />
 
+    <!-- Find in page bar -->
+    <div v-if="findBarVisible" class="find-bar">
+      <input
+        ref="findInputRef"
+        v-model="findText"
+        class="find-input"
+        placeholder="搜索本页内容..."
+        @input="doFindInPage"
+        @keydown.enter.exact="doFindNext"
+        @keydown.enter.shift="doFindPrev"
+        @keydown.escape="closeFindBar"
+      />
+      <span class="find-count" v-if="findText">{{ findMatchInfo }}</span>
+      <button class="find-nav-btn" @click="doFindPrev" title="上一个 (Shift+Enter)">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>
+      </button>
+      <button class="find-nav-btn" @click="doFindNext" title="下一个 (Enter)">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      <button class="find-nav-btn" @click="closeFindBar" title="关闭 (Esc)">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+
     <!-- Image context menu -->
     <div v-if="imgMenu.menuVisible.value" class="image-ctx-menu" :style="{ left: imgMenu.menuX.value + 'px', top: imgMenu.menuY.value + 'px' }">
       <button class="ctx-item" @click="imgMenu.copyImage()">复制图片</button>
@@ -160,12 +177,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, inject, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
+import { ref, computed, inject, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { renderMarkdown } from '../markdown'
 import api from '../api'
 import SyncStatus from '../components/SyncStatus.vue'
 import MoveModal from '../components/MoveModal.vue'
+import SearchOverlay from '../components/SearchOverlay.vue'
 import { useImageContextMenu } from '../composables/useImageContextMenu'
 
 const props = defineProps<{ id: string }>()
@@ -190,9 +208,14 @@ const isDragging = ref(false)
 const contentRef = ref<HTMLElement>()
 const contentBodyRef = ref<HTMLElement>()
 const moveRef = ref()
-const searchKey = ref('')
-const searchResults = ref<any[]>([])
-let searchTimer: any = null
+const showSearch = ref(false)
+const headerSearchKey = ref('')
+
+function openSearchWithKey() {
+  if (headerSearchKey.value.trim()) {
+    showSearch.value = true
+  }
+}
 
 const imgMenu = useImageContextMenu({
   containerRef: () => contentBodyRef.value,
@@ -233,22 +256,17 @@ async function loadDetail() {
 }
 
 function goDoc(filePath: string) {
-  searchKey.value = ''
-  searchResults.value = []
   router.push('/doc/' + encodeURIComponent(filePath))
 }
 
-function doSearch() {
-  if (searchTimer) clearTimeout(searchTimer)
-  searchTimer = setTimeout(async () => {
-    if (!searchKey.value.trim()) { searchResults.value = []; return }
-    try {
-      searchResults.value = await api.search(searchKey.value.trim())
-    } catch {
-      searchResults.value = []
-    }
-  }, 300)
+function onSearchSelect(filePath: string) {
+  headerSearchKey.value = ''
+  router.push('/doc/' + encodeURIComponent(filePath))
 }
+
+watch(showSearch, (val) => {
+  if (!val) headerSearchKey.value = ''
+})
 
 async function doDelete() {
   const doc = detail.value.doc
@@ -488,13 +506,110 @@ watch(renderedHtml, () => {
   })
 })
 
+// Find in page (mark.js)
+import Mark from 'mark.js'
+
+const findBarVisible = ref(false)
+const findText = ref('')
+const findInputRef = ref<HTMLInputElement>()
+const findActiveMatch = ref(0)
+const findTotalMatches = ref(0)
+let markInstance: Mark | null = null
+
+const findMatchInfo = computed(() => {
+  if (!findText.value) return ''
+  if (findTotalMatches.value === 0) return '无匹配'
+  return `${findActiveMatch.value} / ${findTotalMatches.value}`
+})
+
+function openFindBar() {
+  findBarVisible.value = true
+  nextTick(() => {
+    findInputRef.value?.focus()
+    findInputRef.value?.select()
+  })
+}
+
+function closeFindBar() {
+  findBarVisible.value = false
+  findText.value = ''
+  findActiveMatch.value = 0
+  findTotalMatches.value = 0
+  clearMarks()
+}
+
+function clearMarks() {
+  if (markInstance) markInstance.unmark()
+}
+
+function doFindInPage() {
+  clearMarks()
+  if (!findText.value || !contentBodyRef.value) {
+    findActiveMatch.value = 0
+    findTotalMatches.value = 0
+    return
+  }
+
+  markInstance = new Mark(contentBodyRef.value)
+  markInstance.mark(findText.value, {
+    separateWordSearch: false,
+    done(count) {
+      findTotalMatches.value = count
+      if (count > 0) {
+        findActiveMatch.value = 1
+        scrollToMark(0)
+      } else {
+        findActiveMatch.value = 0
+      }
+    }
+  })
+}
+
+function scrollToMark(index: number) {
+  const marks = contentBodyRef.value?.querySelectorAll('mark')
+  if (!marks || marks.length === 0) return
+
+  marks.forEach(m => m.classList.remove('find-current'))
+  const target = marks[index]
+  if (target) {
+    target.classList.add('find-current')
+    target.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }
+}
+
+function doFindNext() {
+  if (findTotalMatches.value === 0) return
+  findActiveMatch.value = findActiveMatch.value >= findTotalMatches.value ? 1 : findActiveMatch.value + 1
+  scrollToMark(findActiveMatch.value - 1)
+}
+
+function doFindPrev() {
+  if (findTotalMatches.value === 0) return
+  findActiveMatch.value = findActiveMatch.value <= 1 ? findTotalMatches.value : findActiveMatch.value - 1
+  scrollToMark(findActiveMatch.value - 1)
+}
+
+function handleFindShortcut(e: KeyboardEvent) {
+  if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
+    e.preventDefault()
+    openFindBar()
+  }
+  if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+    e.preventDefault()
+    showSearch.value = true
+  }
+}
+
 onMounted(() => {
   loadDetail()
   document.addEventListener('click', handleDocClick)
+  document.addEventListener('keydown', handleFindShortcut)
 })
 
 onBeforeUnmount(() => {
   document.removeEventListener('click', handleDocClick)
+  document.removeEventListener('keydown', handleFindShortcut)
+  clearMarks()
   if (scrollCleanup) {
     scrollCleanup()
     scrollCleanup = null
@@ -658,8 +773,60 @@ onBeforeUnmount(() => {
 }
 .more-menu button:hover { background: #f8f7ff; color: var(--tc); }
 
+.find-bar {
+  position: fixed;
+  top: 52px;
+  right: 24px;
+  z-index: 150;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 6px 10px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+}
+.content-body :deep(mark) {
+  background: #fff3a8;
+  color: inherit;
+  padding: 1px 0;
+  border-radius: 2px;
+}
+.content-body :deep(mark.find-current) {
+  background: #ff9632;
+  color: #fff;
+}
+.find-input {
+  border: none;
+  outline: none;
+  font-size: 13px;
+  width: 200px;
+  padding: 4px 8px;
+  background: #f8f9fa;
+  border-radius: 4px;
+}
+.find-count {
+  font-size: 11px;
+  color: #999;
+  white-space: nowrap;
+  min-width: 50px;
+  text-align: center;
+}
+.find-nav-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  color: #666;
+  display: flex;
+  align-items: center;
+}
+.find-nav-btn:hover { background: #f0f0f0; color: var(--tc); }
+
 @media print {
-  .header, .breadcrumb, .sidebar, .doc-actions, .back-top, .footer, .more-menu { display: none !important; }
+  .header, .breadcrumb, .sidebar, .doc-actions, .back-top, .footer, .more-menu, .find-bar { display: none !important; }
   .layout { display: block !important; }
   .content { overflow: visible !important; height: auto !important; padding: 0 !important; }
 }
