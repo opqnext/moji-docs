@@ -8,6 +8,7 @@ import { registerDocIpc } from './ipc/doc'
 import { registerVersionIpc } from './ipc/version'
 import { registerSettingsIpc } from './ipc/settings'
 import { registerUploadIpc } from './ipc/upload'
+import { registerImageIpc } from './ipc/image'
 import { startGitSyncScheduler, stopGitSyncScheduler, syncGit, cloneRepo } from './git-sync'
 import { incrementalReindex } from './indexer'
 import { startWatching, stopWatching } from './file-watcher'
@@ -100,6 +101,7 @@ async function initApp(docsRoot: string): Promise<Database.Database> {
     registerVersionIpc(docsRoot)
     registerSettingsIpc(db, docsRoot)
     registerUploadIpc(docsRoot, db)
+    registerImageIpc(docsRoot)
     appInitialized = true
   }
 

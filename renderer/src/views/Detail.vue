@@ -64,7 +64,7 @@
           >
             <svg class="doc-icon" v-if="item.is_directory" viewBox="0 0 24 24" fill="none" stroke="var(--tc)" stroke-width="1.5"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
             <svg class="doc-icon" v-else viewBox="0 0 24 24" fill="none" stroke="#999" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/></svg>
-            <span class="doc-title">{{ item.title }}</span>
+            <span class="doc-title" :title="item.title">{{ item.title }}</span>
           </div>
         </div>
       </div>
@@ -105,7 +105,7 @@
               </div>
             </div>
           </div>
-          <div class="content-body" :class="{ 'markdown-body': markdownTheme && markdownTheme.value !== 'default' }" v-html="detail.doc.content_html || renderedHtml"></div>
+          <div class="content-body" ref="contentBodyRef" :class="{ 'markdown-body': markdownTheme && markdownTheme.value !== 'default' }" v-html="detail.doc.content_html || renderedHtml" @contextmenu="imgMenu.onContextMenu"></div>
           <div class="footer">{{ footerText }}</div>
         </div>
       </div>
@@ -149,6 +149,12 @@
     </template>
 
     <MoveModal ref="moveRef" />
+
+    <!-- Image context menu -->
+    <div v-if="imgMenu.menuVisible.value" class="image-ctx-menu" :style="{ left: imgMenu.menuX.value + 'px', top: imgMenu.menuY.value + 'px' }">
+      <button class="ctx-item" @click="imgMenu.copyImage()">复制图片</button>
+      <button class="ctx-item" @click="imgMenu.saveImageAs()">图片另存为</button>
+    </div>
   </div>
   <div v-else style="padding: 60px; text-align: center; color: #999;">加载中...</div>
 </template>
@@ -160,6 +166,7 @@ import { renderMarkdown } from '../markdown'
 import api from '../api'
 import SyncStatus from '../components/SyncStatus.vue'
 import MoveModal from '../components/MoveModal.vue'
+import { useImageContextMenu } from '../composables/useImageContextMenu'
 
 const props = defineProps<{ id: string }>()
 const router = useRouter()
@@ -181,10 +188,17 @@ const versionPreviewHtml = ref('')
 const showBackTop = ref(false)
 const isDragging = ref(false)
 const contentRef = ref<HTMLElement>()
+const contentBodyRef = ref<HTMLElement>()
 const moveRef = ref()
 const searchKey = ref('')
 const searchResults = ref<any[]>([])
 let searchTimer: any = null
+
+const imgMenu = useImageContextMenu({
+  containerRef: () => contentBodyRef.value,
+  toast,
+  showSaveAs: true
+})
 
 function getFilePath(): string {
   const raw = props.id || (route.params.id as string)
