@@ -1,6 +1,6 @@
 {
   "name": "moji-docs",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "MojiDocs - Markdown Wiki 桌面应用",
   "main": "out/main/index.js",
   "scripts": {
@@ -16,6 +16,7 @@
     "dompurify": "^3.4.1",
     "gray-matter": "^4.0.3",
     "highlight.js": "^11.11.1",
+    "mark.js": "^8.11.1",
     "marked": "^17.0.5",
     "marked-highlight": "^2.2.4",
     "simple-git": "^3.27.0"
@@ -24,6 +25,7 @@
     "@electron-toolkit/preload": "^3.0.0",
     "@types/better-sqlite3": "^7.6.13",
     "@types/dompurify": "^3.0.5",
+    "@types/mark.js": "^8.11.12",
     "@vitejs/plugin-vue": "^5.0.0",
     "electron": "^33.0.0",
     "electron-builder": "^25.0.0",

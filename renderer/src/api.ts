@@ -8,6 +8,8 @@ declare global {
 }
 
 const api = {
+  invoke: (channel: string, ...args: any[]) => window.mojiApi.invoke(channel, ...args),
+
   isConfigured: () => window.mojiApi.invoke('app:isConfigured'),
   setup: (params: { docsRoot: string; gitUrl?: string; gitBranch?: string }) =>
     window.mojiApi.invoke('app:setup', params),

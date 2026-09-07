@@ -39,7 +39,7 @@ a:hover { opacity: 0.8; }
   border: 1px solid #ddd;
   border-radius: 6px;
   font-size: calc(var(--fs, 14px) - 1px);
-  width: 180px;
+  width: 200px;
   outline: none;
   transition: border-color 0.2s;
 }
